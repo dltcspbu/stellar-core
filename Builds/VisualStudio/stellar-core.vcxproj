@@ -252,7 +252,6 @@ exit /b 0
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\lib\util\easylogging++.cc" />
-    <ClCompile Include="..\..\lib\util\siphash.cpp" />
     <ClCompile Include="..\..\src\bucket\Bucket.cpp" />
     <ClCompile Include="..\..\src\bucket\BucketApplicator.cpp" />
     <ClCompile Include="..\..\src\bucket\BucketInputIterator.cpp" />
@@ -268,9 +267,7 @@ exit /b 0
     <ClCompile Include="..\..\src\bucket\test\BucketMergeMapTests.cpp" />
     <ClCompile Include="..\..\src\bucket\test\BucketTests.cpp" />
     <ClCompile Include="..\..\src\catchup\ApplyBucketsWork.cpp" />
-    <ClCompile Include="..\..\src\catchup\ApplyBufferedLedgersWork.cpp" />
     <ClCompile Include="..\..\src\catchup\ApplyCheckpointWork.cpp" />
-    <ClCompile Include="..\..\src\catchup\ApplyLedgerWork.cpp" />
     <ClCompile Include="..\..\src\catchup\CatchupConfiguration.cpp" />
     <ClCompile Include="..\..\src\catchup\CatchupManagerImpl.cpp" />
     <ClCompile Include="..\..\src\catchup\CatchupWork.cpp" />
@@ -279,18 +276,17 @@ exit /b 0
     <ClCompile Include="..\..\src\catchup\test\CatchupWorkTests.cpp" />
     <ClCompile Include="..\..\src\catchup\DownloadApplyTxsWork.cpp" />
     <ClCompile Include="..\..\src\catchup\VerifyLedgerChainWork.cpp" />
+    <ClCompile Include="..\..\src\crypto\ByteSliceHasher.cpp" />
     <ClCompile Include="..\..\src\crypto\ECDH.cpp" />
     <ClCompile Include="..\..\src\crypto\Hex.cpp" />
     <ClCompile Include="..\..\src\crypto\KeyUtils.cpp" />
     <ClCompile Include="..\..\src\crypto\Random.cpp" />
     <ClCompile Include="..\..\src\crypto\SecretKey.cpp" />
     <ClCompile Include="..\..\src\crypto\SHA.cpp" />
-    <ClCompile Include="..\..\src\crypto\ShortHash.cpp" />
     <ClCompile Include="..\..\src\crypto\SignerKey.cpp" />
     <ClCompile Include="..\..\src\crypto\SignerKeyUtils.cpp" />
     <ClCompile Include="..\..\src\crypto\StrKey.cpp" />
     <ClCompile Include="..\..\src\crypto\test\CryptoTests.cpp" />
-    <ClCompile Include="..\..\src\crypto\test\ShortHashTests.cpp" />
     <ClCompile Include="..\..\src\database\Database.cpp" />
     <ClCompile Include="..\..\src\database\DatabaseConnectionString.cpp" />
     <ClCompile Include="..\..\src\database\DatabaseUtils.cpp" />
@@ -316,7 +312,6 @@ exit /b 0
     <ClCompile Include="..\..\src\historywork\BatchDownloadWork.cpp" />
     <ClCompile Include="..\..\src\herder\QuorumIntersectionCheckerImpl.cpp" />
     <ClCompile Include="..\..\src\herder\test\QuorumIntersectionTests.cpp" />
-    <ClCompile Include="..\..\src\ledger\test\LedgerCloseMetaStreamTests.cpp" />
     <ClCompile Include="..\..\src\test\FuzzerImpl.cpp" />
     <ClCompile Include="..\..\src\transactions\PathPaymentOpFrameBase.cpp" />
     <ClCompile Include="..\..\src\transactions\PathPaymentStrictReceiveOpFrame.cpp" />
@@ -327,7 +322,6 @@ exit /b 0
     <ClCompile Include="..\..\src\util\FileSystemException.cpp" />
     <ClCompile Include="..\..\src\work\BatchWork.cpp" />
     <ClCompile Include="..\..\src\historywork\DownloadBucketsWork.cpp" />
-    <ClCompile Include="..\..\src\historywork\DownloadVerifyTxResultsWork.cpp" />
     <ClCompile Include="..\..\src\historywork\FetchRecentQsetsWork.cpp" />
     <ClCompile Include="..\..\src\historywork\GetAndUnzipRemoteFileWork.cpp" />
     <ClCompile Include="..\..\src\historywork\GetHistoryArchiveStateWork.cpp" />
@@ -344,7 +338,6 @@ exit /b 0
     <ClCompile Include="..\..\src\historywork\ResolveSnapshotWork.cpp" />
     <ClCompile Include="..\..\src\historywork\RunCommandWork.cpp" />
     <ClCompile Include="..\..\src\historywork\VerifyBucketWork.cpp" />
-    <ClCompile Include="..\..\src\historywork\VerifyTxResultsWork.cpp" />
     <ClCompile Include="..\..\src\historywork\WriteSnapshotWork.cpp" />
     <ClCompile Include="..\..\src\history\FileTransferInfo.cpp" />
     <ClCompile Include="..\..\src\history\HistoryArchive.cpp" />
@@ -380,7 +373,6 @@ exit /b 0
     <ClCompile Include="..\..\src\ledger\LedgerTxnOfferSQL.cpp" />
     <ClCompile Include="..\..\src\ledger\LedgerTxnTrustLineSQL.cpp" />
     <ClCompile Include="..\..\src\ledger\SyncingLedgerChain.cpp" />
-    <ClCompile Include="..\..\src\ledger\InMemoryLedgerTxnRoot.cpp" />
     <ClCompile Include="..\..\lib\asio.cpp" />
     <ClCompile Include="..\..\lib\http\connection.cpp" />
     <ClCompile Include="..\..\lib\http\connection_manager.cpp" />
@@ -576,7 +568,6 @@ exit /b 0
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\lib\catch.hpp" />
-    <ClInclude Include="..\..\lib\util\siphash.h" />
     <ClInclude Include="..\..\src\bucket\Bucket.h" />
     <ClInclude Include="..\..\src\bucket\BucketApplicator.h" />
     <ClInclude Include="..\..\src\bucket\BucketInputIterator.h" />
@@ -591,9 +582,7 @@ exit /b 0
     <ClInclude Include="..\..\src\bucket\MergeKey.h" />
     <ClInclude Include="..\..\src\bucket\PublishQueueBuckets.h" />
     <ClInclude Include="..\..\src\catchup\ApplyBucketsWork.h" />
-    <ClInclude Include="..\..\src\catchup\ApplyBufferedLedgersWork.h" />
     <ClInclude Include="..\..\src\catchup\ApplyCheckpointWork.h" />
-    <ClInclude Include="..\..\src\catchup\ApplyLedgerWork.h" />
     <ClInclude Include="..\..\src\catchup\CatchupConfiguration.h" />
     <ClInclude Include="..\..\src\catchup\CatchupManager.h" />
     <ClInclude Include="..\..\src\catchup\CatchupManagerImpl.h" />
@@ -604,17 +593,16 @@ exit /b 0
     <ClInclude Include="..\..\src\catchup\test\CatchupWorkTests.h" />
     <ClInclude Include="..\..\src\catchup\VerifyLedgerChainWork.h" />
     <ClInclude Include="..\..\src\crypto\ByteSlice.h" />
+    <ClInclude Include="..\..\src\crypto\ByteSliceHasher.h" />
     <ClInclude Include="..\..\src\crypto\ECDH.h" />
     <ClInclude Include="..\..\src\crypto\Hex.h" />
     <ClInclude Include="..\..\src\crypto\KeyUtils.h" />
     <ClInclude Include="..\..\src\crypto\Random.h" />
     <ClInclude Include="..\..\src\crypto\SecretKey.h" />
     <ClInclude Include="..\..\src\crypto\SHA.h" />
-    <ClInclude Include="..\..\src\crypto\ShortHash.h" />
     <ClInclude Include="..\..\src\crypto\SignerKey.h" />
     <ClInclude Include="..\..\src\crypto\SignerKeyUtils.h" />
     <ClInclude Include="..\..\src\crypto\StrKey.h" />
-    <ClInclude Include="..\..\src\crypto\XDRHasher.h" />
     <ClInclude Include="..\..\src\database\Database.h" />
     <ClInclude Include="..\..\src\database\DatabaseConnectionString.h" />
     <ClInclude Include="..\..\src\database\DatabaseTypeSpecificOperation.h" />
@@ -643,7 +631,6 @@ exit /b 0
     <ClInclude Include="..\..\src\transactions\simulation\SimulationTransactionFrame.h" />
     <ClInclude Include="..\..\src\work\BatchWork.h" />
     <ClInclude Include="..\..\src\historywork\DownloadBucketsWork.h" />
-    <ClInclude Include="..\..\src\historywork\DownloadVerifyTxResultsWork.h" />
     <ClInclude Include="..\..\src\historywork\FetchRecentQsetsWork.h" />
     <ClInclude Include="..\..\src\historywork\GetAndUnzipRemoteFileWork.h" />
     <ClInclude Include="..\..\src\historywork\GetHistoryArchiveStateWork.h" />
@@ -660,7 +647,6 @@ exit /b 0
     <ClInclude Include="..\..\src\historywork\ResolveSnapshotWork.h" />
     <ClInclude Include="..\..\src\historywork\RunCommandWork.h" />
     <ClInclude Include="..\..\src\historywork\VerifyBucketWork.h" />
-    <ClInclude Include="..\..\src\historywork\VerifyTxResultsWork.h" />
     <ClInclude Include="..\..\src\historywork\WriteSnapshotWork.h" />
     <ClInclude Include="..\..\src\history\FileTransferInfo.h" />
     <ClInclude Include="..\..\src\history\HistoryArchive.h" />
@@ -694,7 +680,6 @@ exit /b 0
     <ClInclude Include="..\..\src\ledger\LedgerTxnHeader.h" />
     <ClInclude Include="..\..\src\ledger\LedgerTxnImpl.h" />
     <ClInclude Include="..\..\src\ledger\SyncingLedgerChain.h" />
-    <ClInclude Include="..\..\src\ledger\InMemoryLedgerTxnRoot.h" />
     <ClInclude Include="..\..\src\ledger\test\LedgerTestUtils.h" />
     <ClInclude Include="..\..\src\ledger\TrustLineWrapper.h" />
     <ClInclude Include="..\..\src\main\Application.h" />

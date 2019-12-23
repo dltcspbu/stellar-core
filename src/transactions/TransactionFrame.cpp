@@ -587,18 +587,16 @@ TransactionFrame::markResultFailed()
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx)
 {
-    TransactionMeta tm(2);
-    return apply(app, ltx, tm);
+    TransactionMeta tm(1);
+    return apply(app, ltx, tm.v1());
 }
 
 bool
 TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   Application& app, AbstractLedgerTxn& ltx,
-                                  TransactionMeta& meta)
+                                  TransactionMetaV1& meta)
 {
     bool errorEncountered = false;
-    auto& operationsMeta =
-        meta.v() == 1 ? meta.v1().operations : meta.v2().operations;
 
     // shield outer scope of any side effects with LedgerTxn
     LedgerTxn ltxTx(ltx);
@@ -618,8 +616,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getInvariantManager().checkOnOperationApply(
                 op->getOperation(), op->getResult(), ltxOp.getDelta());
         }
-
-        operationsMeta.emplace_back(ltxOp.getChanges());
+        meta.operations.emplace_back(ltxOp.getChanges());
         ltxOp.commit();
     }
 
@@ -637,13 +634,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
             // if an error occurred, it is responsibility of account's owner
             // to remove that signer
-            LedgerTxn ltxAfter(ltxTx);
-            removeUsedOneTimeSignerKeys(signatureChecker, ltxAfter);
-            if (meta.v() == 2)
-            {
-                meta.v2().txChangesAfter = ltxAfter.getChanges();
-            }
-            ltxAfter.commit();
+            removeUsedOneTimeSignerKeys(signatureChecker, ltxTx);
         }
 
         ltxTx.commit();
@@ -651,7 +642,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
     if (errorEncountered)
     {
-        operationsMeta.clear();
+        meta.operations.clear();
         markResultFailed();
     }
     return !errorEncountered;
@@ -659,7 +650,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionMeta& meta)
+                        TransactionMetaV1& meta)
 {
     mCachedAccount.reset();
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
@@ -678,10 +669,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
         }
         auto signaturesValid = cv >= (ValidationType::kInvalidPostAuth) &&
                                processSignatures(signatureChecker, ltxTx);
-
-        auto& txChanges =
-            meta.v() == 1 ? meta.v1().txChanges : meta.v2().txChangesBefore;
-        txChanges = ltxTx.getChanges();
+        meta.txChanges = ltxTx.getChanges();
         ltxTx.commit();
         valid = signaturesValid && (cv == ValidationType::kFullyValid);
     }
@@ -699,10 +687,12 @@ TransactionFrame::toStellarMessage() const
 
 void
 TransactionFrame::storeTransaction(Database& db, uint32_t ledgerSeq,
-                                   TransactionMeta const& tm, int txindex,
-                                   TransactionResultSet const& resultSet) const
+                                   TransactionMeta& tm, int txindex,
+                                   TransactionResultSet& resultSet) const
 {
     auto txBytes(xdr::xdr_to_opaque(mEnvelope));
+
+    resultSet.results.emplace_back(getResultPair());
     auto txResultBytes(xdr::xdr_to_opaque(resultSet.results.back()));
 
     std::string txBody;

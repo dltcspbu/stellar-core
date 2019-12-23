@@ -25,6 +25,7 @@ OverlayMetrics::OverlayMetrics(Application& app)
     , mTimeoutStraggler(app.getMetrics().NewMeter(
           {"overlay", "timeout", "straggler"}, "timeout"))
 
+    , mRecvAcceptTimer(app.getMetrics().NewTimer({"overlay", "recv", "accept"}))
     , mRecvErrorTimer(app.getMetrics().NewTimer({"overlay", "recv", "error"}))
     , mRecvHelloTimer(app.getMetrics().NewTimer({"overlay", "recv", "hello"}))
     , mRecvAuthTimer(app.getMetrics().NewTimer({"overlay", "recv", "auth"}))
@@ -56,6 +57,8 @@ OverlayMetrics::OverlayMetrics(Application& app)
     , mRecvSCPExternalizeTimer(
           app.getMetrics().NewTimer({"overlay", "recv", "scp-externalize"}))
 
+    , mSendAcceptMeter(
+          app.getMetrics().NewMeter({"overlay", "send", "error"}, "message"))
     , mSendErrorMeter(
           app.getMetrics().NewMeter({"overlay", "send", "error"}, "message"))
     , mSendHelloMeter(

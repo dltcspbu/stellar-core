@@ -33,6 +33,7 @@ struct OverlayMetrics
     medida::Meter& mTimeoutIdle;
     medida::Meter& mTimeoutStraggler;
 
+    medida::Timer& mRecvAcceptTimer;
     medida::Timer& mRecvErrorTimer;
     medida::Timer& mRecvHelloTimer;
     medida::Timer& mRecvAuthTimer;
@@ -52,6 +53,7 @@ struct OverlayMetrics
     medida::Timer& mRecvSCPNominateTimer;
     medida::Timer& mRecvSCPExternalizeTimer;
 
+    medida::Meter& mSendAcceptMeter;
     medida::Meter& mSendErrorMeter;
     medida::Meter& mSendHelloMeter;
     medida::Meter& mSendAuthMeter;

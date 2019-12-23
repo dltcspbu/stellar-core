@@ -4,9 +4,7 @@
 
 #include "main/CommandLine.h"
 #include "catchup/CatchupConfiguration.h"
-#include "history/HistoryArchiveManager.h"
 #include "history/InferredQuorumUtils.h"
-#include "ledger/LedgerManager.h"
 #include "main/Application.h"
 #include "main/ApplicationUtils.h"
 #include "main/Config.h"
@@ -16,7 +14,6 @@
 #include "scp/QuorumSetUtils.h"
 #include "util/Logging.h"
 #include "util/optional.h"
-#include "util/types.h"
 
 #include "catchup/simulation/ApplyTransactionsWork.h"
 #include "historywork/BatchDownloadWork.h"
@@ -209,13 +206,6 @@ disableBucketGCParser(bool& disableBucketGC)
 }
 
 clara::Opt
-historyArchiveParser(std::string& archive)
-{
-    return clara::Opt(archive, "ARCHIVE-NAME")["--archive"](
-        "Archive name to be used for catchup. Use 'any' to select randomly");
-}
-
-clara::Opt
 historyLedgerNumber(uint32_t& ledgerNum)
 {
     return clara::Opt{ledgerNum, "HISTORY-LEDGER"}["--history-ledger"](
@@ -277,7 +267,7 @@ runWithHelp(CommandLineArgs const& args,
 }
 
 CatchupConfiguration
-parseCatchup(std::string const& catchup, bool extraValidation)
+parseCatchup(std::string const& catchup)
 {
     auto static errorMessage =
         "catchup value should be passed as <DESTINATION-LEDGER/LEDGER-COUNT>, "
@@ -292,11 +282,9 @@ parseCatchup(std::string const& catchup, bool extraValidation)
 
     try
     {
-        auto mode = extraValidation
-                        ? CatchupConfiguration::Mode::OFFLINE_COMPLETE
-                        : CatchupConfiguration::Mode::OFFLINE_BASIC;
         return {parseLedger(catchup.substr(0, separatorIndex)),
-                parseLedgerCount(catchup.substr(separatorIndex + 1)), mode};
+                parseLedgerCount(catchup.substr(separatorIndex + 1)),
+                CatchupConfiguration::Mode::OFFLINE};
     }
     catch (std::exception&)
     {
@@ -471,14 +459,11 @@ runCatchup(CommandLineArgs const& args)
     CommandLine::ConfigOption configOption;
     std::string catchupString;
     std::string outputFile;
-    std::string archive;
-    bool completeValidation = false;
-    bool replayInMemory = false;
 
     auto validateCatchupString = [&] {
         try
         {
-            parseCatchup(catchupString, completeValidation);
+            parseCatchup(catchupString);
             return std::string{};
         }
         catch (std::runtime_error& e)
@@ -486,45 +471,15 @@ runCatchup(CommandLineArgs const& args)
             return std::string{e.what()};
         }
     };
-
-    auto validateCatchupArchive = [&] {
-        if (iequals(archive, "any") || archive.empty())
-        {
-            return std::string{};
-        }
-
-        auto config = configOption.getConfig();
-        if (config.HISTORY.find(archive) != config.HISTORY.end())
-        {
-            return std::string{};
-        }
-        return std::string{"Catchup error: bad archive name"};
-    };
-
     auto catchupStringParser = ParserWithValidation{
         clara::Arg(catchupString, "DESTINATION-LEDGER/LEDGER-COUNT").required(),
         validateCatchupString};
-    auto catchupArchiveParser = ParserWithValidation{
-        historyArchiveParser(archive), validateCatchupArchive};
     auto disableBucketGC = false;
-
-    auto validationParser = [](bool& completeValidation) {
-        return clara::Opt{completeValidation}["--extra-verification"](
-            "verify all files from the archive for the catchup range");
-    };
-
-    auto replayInMemoryParser = [](bool& replayInMemory) {
-        return clara::Opt{replayInMemory}["--replay-in-memory"](
-            "don't use a database, just replay ledgers in memory");
-    };
 
     return runWithHelp(
         args,
         {configurationParser(configOption), catchupStringParser,
-         catchupArchiveParser, outputFileParser(outputFile),
-         disableBucketGCParser(disableBucketGC),
-         validationParser(completeValidation),
-         replayInMemoryParser(replayInMemory)},
+         outputFileParser(outputFile), disableBucketGCParser(disableBucketGC)},
         [&] {
             auto config = configOption.getConfig();
             config.setNoListen();
@@ -541,36 +496,13 @@ runCatchup(CommandLineArgs const& args)
                 config.AUTOMATIC_MAINTENANCE_COUNT = 1000000;
             }
 
-            auto mode = (replayInMemory ? Application::AppMode::REPLAY_IN_MEMORY
-                                        : Application::AppMode::RUN_LIVE_NODE);
-
-            auto newDb = false;
-            if (!Application::modeHasDatabase(mode))
-            {
-                // Need to "initialize a new db" if running in memory.
-                newDb = true;
-                // And don't bother fsyncing buckets without a DB,
-                // they're temporary anyways.
-                config.DISABLE_XDR_FSYNC = true;
-            }
-
             VirtualClock clock(VirtualClock::REAL_TIME);
-            auto app = Application::create(clock, config, newDb, mode);
-            auto const& ham = app->getHistoryArchiveManager();
-            auto archivePtr = ham.getHistoryArchive(archive);
-            if (iequals(archive, "any"))
-            {
-                archivePtr = ham.selectRandomReadableHistoryArchive();
-            }
-
+            auto app = Application::create(clock, config, false);
             Json::Value catchupInfo;
             auto result =
-                catchup(app, parseCatchup(catchupString, completeValidation),
-                        catchupInfo, archivePtr);
+                catchup(app, parseCatchup(catchupString), catchupInfo);
             if (!catchupInfo.isNull())
-            {
                 writeCatchupInfo(catchupInfo, outputFile);
-            }
 
             return result;
         });

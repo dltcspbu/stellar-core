@@ -171,9 +171,8 @@ HerderImpl::valueExternalized(uint64 slotIndex, StellarValue const& value)
     // reflect upgrades with the ones included in this SCP round
     {
         bool updated;
-        auto newUpgrades = mUpgrades.removeUpgrades(value.upgrades.begin(),
-                                                    value.upgrades.end(),
-                                                    value.closeTime, updated);
+        auto newUpgrades = mUpgrades.removeUpgrades(
+            value.upgrades.begin(), value.upgrades.end(), updated);
         if (updated)
         {
             setUpgrades(newUpgrades);

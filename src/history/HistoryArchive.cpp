@@ -315,8 +315,8 @@ HistoryArchiveState::prepareForPublish(Application& app)
 
         auto snap =
             app.getBucketManager().getBucketByHash(hexToBin256(prev.snap));
-        if (!level.next.isClear() && Bucket::getBucketVersion(snap) >=
-                                         Bucket::FIRST_PROTOCOL_SHADOWS_REMOVED)
+        if (Bucket::getBucketVersion(snap) >=
+            Bucket::FIRST_PROTOCOL_SHADOWS_REMOVED)
         {
             level.next.clear();
         }
@@ -337,6 +337,7 @@ HistoryArchiveState::prepareForPublish(Application& app)
             level.next.makeLive(app, maxProtocolVersion, i);
         }
     }
+    assert(containsValidBuckets(app));
 }
 
 HistoryArchiveState::HistoryArchiveState() : server(STELLAR_CORE_VERSION)

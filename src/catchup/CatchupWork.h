@@ -110,15 +110,6 @@ class CatchupWork : public Work
         FAILED
     };
 
-    // Resume application when publish queue shrinks down to this many
-    // checkpoints
-    static uint32_t const PUBLISH_QUEUE_UNBLOCK_APPLICATION;
-
-    // Allow at most this many checkpoints in the publish queue while catching
-    // up. If the queue grows too big, ApplyCheckpointWork will wait until
-    // enough snapshots were published, and unblock itself.
-    static uint32_t const PUBLISH_QUEUE_MAX_SIZE;
-
     // ProgressHandler is called in different phases of catchup with following
     // values of ProgressState argument:
     // - APPLIED_BUCKETS - called after buckets had been applied at lastClosed
@@ -141,8 +132,7 @@ class CatchupWork : public Work
         CatchupConfiguration::Mode catchupMode)>;
 
     CatchupWork(Application& app, CatchupConfiguration catchupConfiguration,
-                ProgressHandler progressHandler,
-                std::shared_ptr<HistoryArchive> archive = nullptr);
+                ProgressHandler progressHandler);
     virtual ~CatchupWork();
     std::string getStatus() const override;
 
@@ -152,19 +142,15 @@ class CatchupWork : public Work
     LedgerHeaderHistoryEntry mVerifiedLedgerRangeStart;
     LedgerHeaderHistoryEntry mLastApplied;
     ProgressHandler mProgressHandler;
-    std::shared_ptr<HistoryArchive> mArchive;
     bool mBucketsAppliedEmitted{false};
-    bool mTransactionsVerifyEmitted{false};
 
     std::shared_ptr<GetHistoryArchiveStateWork> mGetHistoryArchiveStateWork;
     std::shared_ptr<GetHistoryArchiveStateWork> mGetBucketStateWork;
 
     WorkSeqPtr mDownloadVerifyLedgersSeq;
     std::shared_ptr<VerifyLedgerChainWork> mVerifyLedgers;
-    std::shared_ptr<Work> mVerifyTxResults;
     WorkSeqPtr mBucketVerifyApplySeq;
     std::shared_ptr<Work> mTransactionsVerifyApplySeq;
-    std::shared_ptr<BasicWork> mApplyBufferedLedgersWork;
     WorkSeqPtr mCatchupSeq;
 
     bool hasAnyLedgersToCatchupTo() const;
@@ -175,7 +161,6 @@ class CatchupWork : public Work
                                    LedgerNumHashPair rangeEnd);
     WorkSeqPtr downloadApplyBuckets();
     void downloadApplyTransactions(CatchupRange const& catchupRange);
-    void downloadVerifyTxResults(CatchupRange const& catchupRange);
     BasicWork::State runCatchupStep();
 };
 }

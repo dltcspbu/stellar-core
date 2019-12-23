@@ -4,10 +4,12 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "overlay/PeerBareAddress.h"
 #include "util/Timer.h"
 
 #include <functional>
+
+#include "xdr/Stellar-overlay.h"
+#include "my_classes/Name.hpp"
 
 namespace soci
 {
@@ -36,7 +38,7 @@ enum class PeerTypeFilter
 };
 
 /**
- * Raw database record of peer data. Its key is PeerBareAddress.
+ * Raw database record of peer data. Its key is my::PeerFullName.
  */
 struct PeerRecord
 {
@@ -54,7 +56,7 @@ struct PeerQuery
     PeerTypeFilter mTypeFilter;
 };
 
-PeerAddress toXdr(PeerBareAddress const& address);
+PeerNameXdr toXdr(my::PeerName const& peerName);
 
 /**
  * Maintain list of know peers in database.
@@ -84,23 +86,23 @@ class PeerManager
     /**
      * Ensure that given peer is stored in database.
      */
-    void ensureExists(PeerBareAddress const& address);
+    void ensureExists(my::PeerName const& address);
 
     /**
      * Update type of peer associated with given address.
      */
-    void update(PeerBareAddress const& address, TypeUpdate type);
+    void update(my::PeerName const& name, TypeUpdate type);
 
     /**
      * Update "next try" of peer associated with given address - can reset
      * it to now or back off even further in future.
      */
-    void update(PeerBareAddress const& address, BackOffUpdate backOff);
+    void update(my::PeerName const& name, BackOffUpdate backOff);
 
     /**
      * Update both type and "next try" of peer associated with given address.
      */
-    void update(PeerBareAddress const& address, TypeUpdate type,
+    void update(my::PeerName const& name, TypeUpdate type,
                 BackOffUpdate backOff);
 
     /**
@@ -108,33 +110,33 @@ class PeerManager
      * database, create default one. Second value in pair is true when data
      * was loaded from database, false otherwise.
      */
-    std::pair<PeerRecord, bool> load(PeerBareAddress const& address);
+    std::pair<PeerRecord, bool> load(my::PeerName const& address);
 
     /**
      * Store PeerRecord data into database. If inDatabase is true, uses UPDATE
      * query, uses INSERT otherwise.
      */
-    void store(PeerBareAddress const& address, PeerRecord const& PeerRecord,
+    void store(my::PeerName const& peerName, PeerRecord const& PeerRecord,
                bool inDatabase);
 
     /**
      * Load size random peers matching query from database.
      */
-    std::vector<PeerBareAddress> loadRandomPeers(PeerQuery const& query,
-                                                 int size);
+    std::vector<my::PeerName> loadRandomPeers(PeerQuery const& query,
+                                              int size);
 
     /**
      * Remove peers that have at least minNumFailures. Can only remove peer with
      * given address.
      */
     void removePeersWithManyFailures(int minNumFailures,
-                                     PeerBareAddress const* address = nullptr);
+                                     my::PeerName const* address = nullptr);
 
     /**
      * Get list of peers to send to peer with given address.
      */
-    std::vector<PeerBareAddress> getPeersToSend(int size,
-                                                PeerBareAddress const& address);
+    std::vector<my::PeerName> getPeersToSend(int size,
+                                             my::PeerName const& address);
 
   private:
     static const char* kSQLCreateStatement;
@@ -145,7 +147,7 @@ class PeerManager
 
     int countPeers(std::string const& where,
                    std::function<void(soci::statement&)> const& bind);
-    std::vector<PeerBareAddress>
+    std::vector<my::PeerName>
     loadPeers(int limit, int offset, std::string const& where,
               std::function<void(soci::statement&)> const& bind);
 

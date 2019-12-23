@@ -632,7 +632,8 @@ Bucket::merge(BucketManager& bucketManager, uint32_t maxProtocolVersion,
     {
         bucketManager.incrMergeCounters(mc);
     }
-    MergeKey mk{keepDeadEntries, oldBucket, newBucket, shadows};
+    MergeKey mk{maxProtocolVersion, keepDeadEntries, oldBucket, newBucket,
+                shadows};
     return out.getBucket(bucketManager, &mk);
 }
 

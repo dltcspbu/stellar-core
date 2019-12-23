@@ -13,49 +13,46 @@
 #include <soci.h>
 #include <string>
 
-namespace medida
-{
-class Meter;
-class Counter;
+namespace medida {
+  class Meter;
+
+  class Counter;
 }
 
-namespace stellar
-{
-class Application;
-class SQLLogContext;
+namespace stellar {
+  class Application;
+
+  class SQLLogContext;
 
 /**
  * Helper class for borrowing a SOCI prepared statement handle into a local
  * scope and cleaning it up once done with it. Returned by
  * Database::getPreparedStatement below.
  */
-class StatementContext : NonCopyable
-{
+  class StatementContext : NonCopyable {
     std::shared_ptr<soci::statement> mStmt;
 
   public:
-    StatementContext(std::shared_ptr<soci::statement> stmt) : mStmt(stmt)
-    {
+    StatementContext(std::shared_ptr<soci::statement> stmt) : mStmt(stmt) {
+      mStmt->clean_up(false);
+    }
+
+    StatementContext(StatementContext &&other) {
+      mStmt = other.mStmt;
+      other.mStmt.reset();
+    }
+
+    ~StatementContext() {
+      if (mStmt) {
         mStmt->clean_up(false);
+      }
     }
-    StatementContext(StatementContext&& other)
-    {
-        mStmt = other.mStmt;
-        other.mStmt.reset();
+
+    soci::statement &
+    statement() {
+      return *mStmt;
     }
-    ~StatementContext()
-    {
-        if (mStmt)
-        {
-            mStmt->clean_up(false);
-        }
-    }
-    soci::statement&
-    statement()
-    {
-        return *mStmt;
-    }
-};
+  };
 
 /**
  * Object that owns the database connection(s) that an application
@@ -81,15 +78,14 @@ class StatementContext : NonCopyable
  * (SQL isolation level 'SERIALIZABLE' in Postgresql and Sqlite, neither of
  * which provide true serializability).
  */
-class Database : NonMovableOrCopyable
-{
-    Application& mApp;
-    medida::Meter& mQueryMeter;
+  class Database : NonMovableOrCopyable {
+    Application &mApp;
+    medida::Meter &mQueryMeter;
     soci::session mSession;
     std::unique_ptr<soci::connection_pool> mPool;
 
     std::map<std::string, std::shared_ptr<soci::statement>> mStatements;
-    medida::Counter& mStatementsSize;
+    medida::Counter &mStatementsSize;
 
     // Helpers for maintaining the total query time and calculating
     // idle percentage.
@@ -100,17 +96,19 @@ class Database : NonMovableOrCopyable
     VirtualClock::time_point mLastIdleTotalTime;
 
     static bool gDriversRegistered;
+
     static void registerDrivers();
+
     void applySchemaUpgrade(unsigned long vers);
 
   public:
     // Instantiate object and connect to app.getConfig().DATABASE;
     // if there is a connection error, this will throw.
-    Database(Application& app);
+    Database(Application &app);
 
     // Return a crude meter of total queries to the db, for use in
     // overlay/LoadManager.
-    medida::Meter& getQueryMeter();
+    medida::Meter &getQueryMeter();
 
     // Number of nanoseconds spent processing queries since app startup,
     // without any reference to excluded time or running counters.
@@ -119,8 +117,8 @@ class Database : NonMovableOrCopyable
 
     // Subtract a number of nanoseconds from the running time counts,
     // due to database usage spikes, specifically during ledger-close.
-    void excludeTime(std::chrono::nanoseconds const& queryTime,
-                     std::chrono::nanoseconds const& totalTime);
+    void excludeTime(std::chrono::nanoseconds const &queryTime,
+                     std::chrono::nanoseconds const &totalTime);
 
     // Return the percent of the time since the last call to this
     // method that database has been idle, _excluding_ the times
@@ -136,7 +134,7 @@ class Database : NonMovableOrCopyable
     // statement handle for the provided query. The prepared statement handle
     // is created if necessary before borrowing, and reset (unbound from data)
     // when the statement context is destroyed.
-    StatementContext getPreparedStatement(std::string const& query);
+    StatementContext getPreparedStatement(std::string const &query);
 
     // Purge all cached prepared statements, closing their handles with the
     // database.
@@ -145,11 +143,15 @@ class Database : NonMovableOrCopyable
     // Return metric-gathering timers for various families of SQL operation.
     // These timers automatically count the time they are alive for,
     // so only acquire them immediately before executing an SQL statement.
-    medida::TimerContext getInsertTimer(std::string const& entityName);
-    medida::TimerContext getSelectTimer(std::string const& entityName);
-    medida::TimerContext getDeleteTimer(std::string const& entityName);
-    medida::TimerContext getUpdateTimer(std::string const& entityName);
-    medida::TimerContext getUpsertTimer(std::string const& entityName);
+    medida::TimerContext getInsertTimer(std::string const &entityName);
+
+    medida::TimerContext getSelectTimer(std::string const &entityName);
+
+    medida::TimerContext getDeleteTimer(std::string const &entityName);
+
+    medida::TimerContext getUpdateTimer(std::string const &entityName);
+
+    medida::TimerContext getUpsertTimer(std::string const &entityName);
 
     // If possible (i.e. "on postgres") issue an SQL pragma that marks
     // the current transaction as read-only. The effects of this last
@@ -160,8 +162,8 @@ class Database : NonMovableOrCopyable
     bool isSqlite() const;
 
     // Call `op` back with the specific database backend subtype in use.
-    template <typename T>
-    T doDatabaseTypeSpecificOperation(DatabaseTypeSpecificOperation<T>& op);
+    template<typename T>
+    T doDatabaseTypeSpecificOperation(DatabaseTypeSpecificOperation<T> &op);
 
     // Return true if a connection pool is available for worker threads
     // to read from the database through, otherwise false.
@@ -184,43 +186,39 @@ class Database : NonMovableOrCopyable
     void upgradeToCurrentSchema();
 
     // Access the underlying SOCI session object
-    soci::session& getSession();
+    soci::session &getSession();
 
     // Access the optional SOCI connection pool available for worker
     // threads. Throws an error if !canUsePool().
-    soci::connection_pool& getPool();
-};
+    soci::connection_pool &getPool();
+  };
 
-template <typename T>
-T
-Database::doDatabaseTypeSpecificOperation(DatabaseTypeSpecificOperation<T>& op)
-{
+  template<typename T>
+  T
+  Database::doDatabaseTypeSpecificOperation(DatabaseTypeSpecificOperation<T> &op) {
     auto b = mSession.get_backend();
-    if (auto sq = dynamic_cast<soci::sqlite3_session_backend*>(b))
-    {
-        return op.doSqliteSpecificOperation(sq);
+    if (auto sq = dynamic_cast<soci::sqlite3_session_backend *>(b)) {
+      return op.doSqliteSpecificOperation(sq);
 #ifdef USE_POSTGRES
-    }
-    else if (auto pg = dynamic_cast<soci::postgresql_session_backend*>(b))
-    {
-        return op.doPostgresSpecificOperation(pg);
+      }
+      else if (auto pg = dynamic_cast<soci::postgresql_session_backend*>(b))
+      {
+          return op.doPostgresSpecificOperation(pg);
 #endif
+    } else {
+      // Extend this with other cases if we support more databases.
+      abort();
     }
-    else
-    {
-        // Extend this with other cases if we support more databases.
-        abort();
-    }
-}
+  }
 
-class DBTimeExcluder : NonCopyable
-{
-    Application& mApp;
+  class DBTimeExcluder : NonCopyable {
+    Application &mApp;
     std::chrono::nanoseconds mStartQueryTime;
     VirtualClock::time_point mStartTotalTime;
 
   public:
-    DBTimeExcluder(Application& mApp);
+    DBTimeExcluder(Application &mApp);
+
     ~DBTimeExcluder();
-};
+  };
 }

@@ -93,7 +93,7 @@ class TransactionFrame
     void markResultFailed();
 
     bool applyOperations(SignatureChecker& checker, Application& app,
-                         AbstractLedgerTxn& ltx, TransactionMeta& meta);
+                         AbstractLedgerTxn& ltx, TransactionMetaV1& meta);
 
     void processSeqNum(AbstractLedgerTxn& ltx);
 
@@ -182,7 +182,8 @@ class TransactionFrame
 
     // apply this transaction to the current ledger
     // returns true if successfully applied
-    bool apply(Application& app, AbstractLedgerTxn& ltx, TransactionMeta& meta);
+    bool apply(Application& app, AbstractLedgerTxn& ltx,
+               TransactionMetaV1& meta);
 
     // version without meta
     bool apply(Application& app, AbstractLedgerTxn& ltx);
@@ -194,9 +195,8 @@ class TransactionFrame
                                AccountID const& accountID);
 
     // transaction history
-    void storeTransaction(Database& db, uint32_t ledgerSeq,
-                          TransactionMeta const& tm, int txindex,
-                          TransactionResultSet const& resultSet) const;
+    void storeTransaction(Database& db, uint32_t ledgerSeq, TransactionMeta& tm,
+                          int txindex, TransactionResultSet& resultSet) const;
 
     // fee history
     void storeTransactionFee(Database& db, uint32_t ledgerSeq,

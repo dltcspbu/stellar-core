@@ -59,8 +59,7 @@ class FutureBucket
     std::shared_ptr<Bucket> mInputCurrBucket;
     std::shared_ptr<Bucket> mInputSnapBucket;
     std::vector<std::shared_ptr<Bucket>> mInputShadowBuckets;
-    std::shared_ptr<Bucket> mOutputBucket;
-    std::shared_future<std::shared_ptr<Bucket>> mOutputBucketFuture;
+    std::shared_future<std::shared_ptr<Bucket>> mOutputBucket;
 
     // These strings hold the serializable (or deserialized) bucket hashes of
     // the inputs and outputs of a merge; depending on the state of the

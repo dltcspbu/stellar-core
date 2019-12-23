@@ -23,14 +23,9 @@ using namespace std;
 // LoopbackPeer
 ///////////////////////////////////////////////////////////////////////
 
-LoopbackPeer::LoopbackPeer(Application& app, PeerRole role) : Peer(app, role)
+LoopbackPeer::LoopbackPeer(Application& app, PeerRole role)
+                        : Peer(app, role)
 {
-}
-
-std::string
-LoopbackPeer::getIP() const
-{
-    return "127.0.0.1";
 }
 
 AuthCert
@@ -433,12 +428,12 @@ LoopbackPeerConnection::LoopbackPeerConnection(Application& initiator,
         return;
     }
 
-    mInitiator->startIdleTimer();
-    mAcceptor->startIdleTimer();
+//    mInitiator->startIdleTimer();
+//    mAcceptor->startIdleTimer();
 
     auto init = mInitiator;
     mInitiator->getApp().postOnMainThread(
-        [init]() { init->connectHandler(asio::error_code()); },
+        [init]() { init->connectHandler(); },
         "LoopbackPeer: connect");
 }
 

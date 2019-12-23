@@ -196,7 +196,7 @@ VirtualClock::flushCancelledEvents()
         mFlushesIgnored++;
         return;
     }
-    assertThreadIsMain();
+    //assertThreadIsMain();
     // LOG(DEBUG) << "VirtualClock::cancelAllEventsFrom";
 
     auto toKeep = vector<shared_ptr<VirtualClockEvent>>();

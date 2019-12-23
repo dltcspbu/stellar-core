@@ -427,32 +427,11 @@ BucketList::resolveAnyReadyFutures()
 }
 
 bool
-BucketList::futuresAllResolved(uint32_t maxLevel) const
+BucketList::futuresAllResolved() const
 {
-    assert(maxLevel < mLevels.size());
-
-    for (uint32_t i = 0; i <= maxLevel; i++)
-    {
-        if (mLevels[i].getNext().isMerging())
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
-uint32_t
-BucketList::getMaxMergeLevel(uint32_t currLedger) const
-{
-    uint32_t i = 0;
-    for (; i < static_cast<uint32_t>(mLevels.size()) - 1; ++i)
-    {
-        if (!levelShouldSpill(currLedger, i))
-        {
-            break;
-        }
-    }
-    return i;
+    return std::all_of(
+        mLevels.begin(), mLevels.end(),
+        [](BucketLevel const& bl) { return !bl.getNext().isMerging(); });
 }
 
 void

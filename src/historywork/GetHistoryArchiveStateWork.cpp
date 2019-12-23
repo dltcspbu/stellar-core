@@ -17,7 +17,7 @@ namespace stellar
 {
 GetHistoryArchiveStateWork::GetHistoryArchiveStateWork(
     Application& app, uint32_t seq, std::shared_ptr<HistoryArchive> archive,
-    std::string mode, size_t maxRetries)
+    size_t maxRetries)
     : Work(app, "get-archive-state", maxRetries)
     , mSeq(seq)
     , mArchive(archive)
@@ -27,9 +27,7 @@ GetHistoryArchiveStateWork::GetHistoryArchiveStateWork(
                   : app.getHistoryManager().localFilename(
                         HistoryArchiveState::baseName()))
     , mGetHistoryArchiveStateSuccess(app.getMetrics().NewMeter(
-          {"history", "download-history-archive-state" + std::move(mode),
-           "success"},
-          "event"))
+          {"history", "download-history-archive-state", "success"}, "event"))
 {
 }
 

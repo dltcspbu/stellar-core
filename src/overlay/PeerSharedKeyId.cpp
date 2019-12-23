@@ -3,6 +3,8 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/PeerSharedKeyId.h"
+#include "xdr/Stellar-overlay.h"
+#include "main/Config.h"
 
 namespace stellar
 {

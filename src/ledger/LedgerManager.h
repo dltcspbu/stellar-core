@@ -66,6 +66,7 @@ class LedgerManager
         NONE,
         WAITING_FOR_TRIGGER_LEDGER,
         APPLYING_HISTORY,
+        APPLYING_BUFFERED_LEDGERS,
         WAITING_FOR_CLOSING_LEDGER
     };
 
@@ -147,8 +148,7 @@ class LedgerManager
     // LedgerManager detects it is desynchronized from SCP's consensus ledger.
     // This method is present in the public interface to permit testing and
     // offline catchups.
-    virtual void startCatchup(CatchupConfiguration configuration,
-                              std::shared_ptr<HistoryArchive> archive) = 0;
+    virtual void startCatchup(CatchupConfiguration configuration) = 0;
 
     // Forcibly close the current ledger, applying `ledgerData` as the consensus
     // changes.  This is normally done automatically as part of
@@ -159,10 +159,6 @@ class LedgerManager
     // deletes old entries stored in the database
     virtual void deleteOldEntries(Database& db, uint32_t ledgerSeq,
                                   uint32_t count) = 0;
-
-    // popBufferedLedger will throw if there are no buffered ledgers
-    virtual bool hasBufferedLedger() const = 0;
-    virtual LedgerCloseData popBufferedLedger() = 0;
 
     virtual ~LedgerManager()
     {

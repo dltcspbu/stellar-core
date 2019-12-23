@@ -135,10 +135,9 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
         thisConfig.RUN_STANDALONE = true;
         thisConfig.FORCE_SCP = true;
 
-        thisConfig.TEST_CASES_ENABLED = true;
-
-        thisConfig.PEER_PORT =
-            static_cast<unsigned short>(DEFAULT_PEER_PORT + instanceNumber * 2);
+//        thisConfig.PEER_PORT =
+//            static_cast<unsigned short>(DEFAULT_PEER_PORT + instanceNumber * 2);
+        thisConfig.PEER_NAME = my::PeerName(DEFAULT_PEER_NAME + instanceNumber * 2);
         thisConfig.HTTP_PORT = static_cast<unsigned short>(
             DEFAULT_PEER_PORT + instanceNumber * 2 + 1);
 

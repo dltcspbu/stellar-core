@@ -13,36 +13,28 @@
 #include "test/TestUtils.h"
 #include "test/test.h"
 
+#include "my_classes/Name.hpp"
+
 namespace stellar
 {
 
 using namespace std;
-
-PeerBareAddress
-localhost(unsigned short port)
-{
-    return PeerBareAddress{"127.0.0.1", port};
-}
 
 TEST_CASE("toXdr", "[overlay][PeerManager]")
 {
     VirtualClock clock;
     Application::pointer app = createTestApplication(clock, getTestConfig());
     auto& pm = app->getOverlayManager().getPeerManager();
-    auto address = PeerBareAddress::resolve("1.25.50.200:256", *app);
+    auto address = my::PeerName("00000256");
 
     SECTION("toXdr")
     {
-        REQUIRE(address.getIP() == "1.25.50.200");
-        REQUIRE(address.getPort() == 256);
+        string peerName{"00000256"};
+        REQUIRE(address.toString() == peerName);
+
 
         auto xdr = toXdr(address);
-        REQUIRE(xdr.port == 256);
-        REQUIRE(xdr.ip.ipv4()[0] == 1);
-        REQUIRE(xdr.ip.ipv4()[1] == 25);
-        REQUIRE(xdr.ip.ipv4()[2] == 50);
-        REQUIRE(xdr.ip.ipv4()[3] == 200);
-        REQUIRE(xdr.numFailures == 0);
+        REQUIRE(xdr.data == *(uint64_t*)peerName.data());
     }
 
     SECTION("database roundtrip")
@@ -77,186 +69,19 @@ TEST_CASE("toXdr", "[overlay][PeerManager]")
     }
 }
 
-TEST_CASE("private addresses", "[overlay][PeerManager]")
-{
-    PeerBareAddress pa("1.2.3.4", 15);
-    CHECK(!pa.isPrivate());
-    pa = PeerBareAddress("10.1.2.3", 15);
-    CHECK(pa.isPrivate());
-    pa = PeerBareAddress("172.17.1.2", 15);
-    CHECK(pa.isPrivate());
-    pa = PeerBareAddress("192.168.1.2", 15);
-    CHECK(pa.isPrivate());
-}
-
-TEST_CASE("create peer record", "[overlay][PeerManager]")
-{
-    SECTION("empty")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress("", 0), std::runtime_error);
-    }
-
-    SECTION("empty ip")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress("", 80), std::runtime_error);
-    }
-
-    SECTION("random string") // PeerBareAddress does not validate IP format
-    {
-        auto pa = PeerBareAddress("random string", 80);
-        REQUIRE(pa.getIP() == "random string");
-        REQUIRE(pa.getPort() == 80);
-    }
-
-    SECTION("valid data")
-    {
-        auto pa = localhost(80);
-        REQUIRE(pa.getIP() == "127.0.0.1");
-        REQUIRE(pa.getPort() == 80);
-    }
-}
-
-TEST_CASE("parse peer record", "[overlay][PeerManager]")
-{
-    VirtualClock clock;
-    auto app = createTestApplication(clock, getTestConfig());
-
-    SECTION("empty")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("random string")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("random string", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("invalid ipv4")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.256", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("256.256.256.256", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("ipv4 mask instead of address")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.1/8", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.1/16", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.1/24", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("valid ipv6")
-    {
-        REQUIRE_THROWS_AS(
-            PeerBareAddress::resolve("2001:db8:a0b:12f0::1", *app),
-            std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve(
-                              "2001:0db8:0a0b:12f0:0000:0000:0000:0001", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("invalid ipv6")
-    {
-        REQUIRE_THROWS_AS(
-            PeerBareAddress::resolve("10000:db8:a0b:12f0::1", *app),
-            std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve(
-                              "2001:0db8:0a0b:12f0:0000:10000:0000:0001", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("ipv6 mask instead of address")
-    {
-        REQUIRE_THROWS_AS(
-            PeerBareAddress::resolve("2001:db8:a0b:12f0::1/16", *app),
-            std::runtime_error);
-        REQUIRE_THROWS_AS(
-            PeerBareAddress::resolve("2001:db8:a0b:12f0::1/32", *app),
-            std::runtime_error);
-        REQUIRE_THROWS_AS(
-            PeerBareAddress::resolve("2001:db8:a0b:12f0::1/64", *app),
-            std::runtime_error);
-    }
-
-    SECTION("valid ipv4 with empty port")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.2:", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("valid ipv4 with invalid port")
-    {
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.2:-1", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.2:0", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.2:65536", *app),
-                          std::runtime_error);
-        REQUIRE_THROWS_AS(PeerBareAddress::resolve("127.0.0.2:65537", *app),
-                          std::runtime_error);
-    }
-
-    SECTION("valid ipv4 with default port")
-    {
-        auto pr = PeerBareAddress::resolve("127.0.0.2", *app);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == DEFAULT_PEER_PORT);
-
-        pr = PeerBareAddress::resolve("8.8.8.8", *app);
-        REQUIRE(pr.getIP() == "8.8.8.8");
-        REQUIRE(pr.getPort() == DEFAULT_PEER_PORT);
-    }
-
-    SECTION("valid ipv4 with different default port")
-    {
-        auto pr = PeerBareAddress::resolve("127.0.0.2", *app, 10);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == 10);
-
-        pr = PeerBareAddress::resolve("8.8.8.8", *app, 10);
-        REQUIRE(pr.getIP() == "8.8.8.8");
-        REQUIRE(pr.getPort() == 10);
-    }
-
-    SECTION("valid ipv4 with valid port")
-    {
-        auto pr = PeerBareAddress::resolve("127.0.0.2:1", *app);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == 1);
-
-        pr = PeerBareAddress::resolve("127.0.0.2:1234", *app);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == 1234);
-
-        pr = PeerBareAddress::resolve("127.0.0.2:65534", *app);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == 65534);
-
-        pr = PeerBareAddress::resolve("127.0.0.2:65535", *app);
-        REQUIRE(pr.getIP() == "127.0.0.2");
-        REQUIRE(pr.getPort() == 65535);
-    }
-}
-
 TEST_CASE("loadRandomPeers", "[overlay][PeerManager]")
 {
     VirtualClock clock;
     auto app = createTestApplication(clock, getTestConfig());
     auto& peerManager = app->getOverlayManager().getPeerManager();
 
-    auto getPorts = [&](PeerQuery const& query) {
+    auto getPeerNames = [&](PeerQuery const& query) {
         auto peers = peerManager.loadRandomPeers(query, 1000);
-        auto result = std::set<int>{};
+        auto result = std::set<my::PeerName>{};
         std::transform(
             std::begin(peers), std::end(peers),
             std::inserter(result, std::end(result)),
-            [](PeerBareAddress const& address) { return address.getPort(); });
+            [](my::PeerName const& address) { return address; });
         return result;
     };
 
@@ -264,8 +89,8 @@ TEST_CASE("loadRandomPeers", "[overlay][PeerManager]")
     auto past = clock.now() - std::chrono::seconds(1);
     auto future = clock.now() + std::chrono::seconds(1);
 
-    unsigned short port = 1;
-    auto peerRecords = std::map<int, PeerRecord>{};
+    my::PeerName port{"00000000"};
+    auto peerRecords = std::map<my::PeerName, PeerRecord>{};
     for (auto time : {past, now, future})
     {
         for (auto numFailures : {0, 1})
@@ -277,7 +102,7 @@ TEST_CASE("loadRandomPeers", "[overlay][PeerManager]")
                     PeerRecord{VirtualClock::pointToTm(time), numFailures,
                                static_cast<int>(type)};
                 peerRecords[port] = peerRecord;
-                peerManager.store(localhost(port), peerRecord, false);
+                peerManager.store(port, peerRecord, false);
                 port++;
             }
         }
@@ -333,7 +158,7 @@ TEST_CASE("loadRandomPeers", "[overlay][PeerManager]")
                   PeerTypeFilter::PREFERRED_ONLY, PeerTypeFilter::ANY_OUTBOUND})
             {
                 auto query = PeerQuery{useNextAttempt, numFailures, filter};
-                auto ports = getPorts(query);
+                auto ports = getPeerNames(query);
                 for (auto record : peerRecords)
                 {
                     if (ports.find(record.first) != std::end(ports))
@@ -355,7 +180,7 @@ TEST_CASE("getPeersToSend", "[overlay][PeerManager]")
     VirtualClock clock;
     auto app = createTestApplication(clock, getTestConfig());
     auto& peerManager = app->getOverlayManager().getPeerManager();
-    auto myAddress = PeerBareAddress("127.0.0.255", 1);
+    my::PeerName myAddress("00000001");
     auto getSize = [&](int requestedSize) {
         return peerManager.getPeersToSend(requestedSize, myAddress).size();
     };
@@ -363,26 +188,26 @@ TEST_CASE("getPeersToSend", "[overlay][PeerManager]")
                            unsigned short failedInboundCount,
                            unsigned short normalOutboundCount,
                            unsigned short failedOutboundCount) {
-        unsigned short port = 1;
+        my::PeerName port{"00000001"};
         for (auto i = 0; i < normalInboundCount; i++)
         {
-            peerManager.ensureExists(localhost(port++));
+            peerManager.ensureExists(port++);
         }
         for (auto i = 0; i < failedInboundCount; i++)
         {
             peerManager.store(
-                localhost(port++),
+                    port++,
                 PeerRecord{{}, 11, static_cast<int>(PeerType::INBOUND)}, false);
         }
         for (auto i = 0; i < normalOutboundCount; i++)
         {
-            peerManager.update(localhost(port++),
+            peerManager.update(port++,
                                PeerManager::TypeUpdate::SET_OUTBOUND);
         }
         for (auto i = 0; i < failedOutboundCount; i++)
         {
             peerManager.store(
-                localhost(port++),
+                port++,
                 PeerRecord{{}, 11, static_cast<int>(PeerType::OUTBOUND)},
                 false);
         }
@@ -485,25 +310,25 @@ TEST_CASE("RandomPeerSource::nextAttemptCutoff also limits maxFailures",
         peerManager, RandomPeerSource::nextAttemptCutoff(PeerType::OUTBOUND)};
 
     auto now = VirtualClock::pointToTm(clock.now());
-    peerManager.store(localhost(1),
+    peerManager.store(my::PeerName("00000001"),
                       {now, 0, static_cast<int>(PeerType::INBOUND)}, false);
-    peerManager.store(localhost(2),
+    peerManager.store(my::PeerName("00000002"),
                       {now, 0, static_cast<int>(PeerType::OUTBOUND)}, false);
-    peerManager.store(localhost(3),
+    peerManager.store(my::PeerName("00000003"),
                       {now, 120, static_cast<int>(PeerType::INBOUND)}, false);
-    peerManager.store(localhost(4),
+    peerManager.store(my::PeerName("00000004"),
                       {now, 120, static_cast<int>(PeerType::OUTBOUND)}, false);
-    peerManager.store(localhost(5),
+    peerManager.store(my::PeerName("00000005"),
                       {now, 121, static_cast<int>(PeerType::INBOUND)}, false);
-    peerManager.store(localhost(6),
+    peerManager.store(my::PeerName("00000006"),
                       {now, 121, static_cast<int>(PeerType::OUTBOUND)}, false);
 
     auto peers = randomPeerSource.getRandomPeers(
-        50, [](PeerBareAddress const&) { return true; });
+        50, [](my::PeerName const&) { return true; });
     REQUIRE(peers.size() == 2);
-    REQUIRE(std::find(std::begin(peers), std::end(peers), localhost(2)) !=
+    REQUIRE(std::find(std::begin(peers), std::end(peers), my::PeerName("00000002")) !=
             std::end(peers));
-    REQUIRE(std::find(std::begin(peers), std::end(peers), localhost(4)) !=
+    REQUIRE(std::find(std::begin(peers), std::end(peers), my::PeerName("00000004")) !=
             std::end(peers));
 }
 
@@ -516,24 +341,24 @@ TEST_CASE("purge peer table", "[overlay][PeerManager]")
         return PeerRecord{{}, numFailures, static_cast<int>(PeerType::INBOUND)};
     };
 
-    peerManager.store(localhost(1), record(1), false);
-    peerManager.store(localhost(2), record(2), false);
-    peerManager.store(localhost(3), record(3), false);
-    peerManager.store(localhost(4), record(4), false);
-    peerManager.store(localhost(5), record(5), false);
+    peerManager.store(my::PeerName("00000001"), record(1), false);
+    peerManager.store(my::PeerName("00000002"), record(2), false);
+    peerManager.store(my::PeerName("00000003"), record(3), false);
+    peerManager.store(my::PeerName("00000004"), record(4), false);
+    peerManager.store(my::PeerName("00000005"), record(5), false);
 
     peerManager.removePeersWithManyFailures(3);
-    REQUIRE(peerManager.load(localhost(1)).second);
-    REQUIRE(peerManager.load(localhost(2)).second);
-    REQUIRE(!peerManager.load(localhost(3)).second);
-    REQUIRE(!peerManager.load(localhost(4)).second);
-    REQUIRE(!peerManager.load(localhost(5)).second);
+    REQUIRE(peerManager.load(my::PeerName("00000001")).second);
+    REQUIRE(peerManager.load(my::PeerName("00000002")).second);
+    REQUIRE(!peerManager.load(my::PeerName("00000003")).second);
+    REQUIRE(!peerManager.load(my::PeerName("00000004")).second);
+    REQUIRE(!peerManager.load(my::PeerName("00000005")).second);
 
-    auto localhost2 = localhost(2);
+    auto localhost2 = my::PeerName("00000002");
     peerManager.removePeersWithManyFailures(3, &localhost2);
-    REQUIRE(peerManager.load(localhost(2)).second);
+    REQUIRE(peerManager.load(my::PeerName("00000002")).second);
 
     peerManager.removePeersWithManyFailures(2, &localhost2);
-    REQUIRE(!peerManager.load(localhost(2)).second);
+    REQUIRE(!peerManager.load(my::PeerName("00000002")).second);
 }
 }

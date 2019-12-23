@@ -6,11 +6,11 @@
 
 #include "util/asio.h"
 #include "database/Database.h"
-#include "overlay/PeerBareAddress.h"
 #include "overlay/StellarXDR.h"
 #include "util/NonCopyable.h"
 #include "util/Timer.h"
 #include "xdrpp/message.h"
+#include "my_classes/Name.hpp"
 
 namespace medida
 {
@@ -81,7 +81,8 @@ class Peer : public std::enable_shared_from_this<Peer>,
     std::string mRemoteVersion;
     uint32_t mRemoteOverlayMinVersion;
     uint32_t mRemoteOverlayVersion;
-    PeerBareAddress mAddress;
+    my::PeerName mPeerName;
+    my::PeerName mMyName;
 
     VirtualClock::time_point mCreationTime;
 
@@ -97,6 +98,7 @@ class Peer : public std::enable_shared_from_this<Peer>,
     void recvMessage(AuthenticatedMessage const& msg);
     void recvMessage(xdr::msg_ptr const& xdrBytes);
 
+    void recvAccept(const StellarMessage &msg);
     virtual void recvError(StellarMessage const& msg);
     void updatePeerRecordAfterEcho();
     void updatePeerRecordAfterAuthentication();
@@ -136,8 +138,8 @@ class Peer : public std::enable_shared_from_this<Peer>,
 
     virtual AuthCert getAuthCert();
 
-    void startIdleTimer();
-    void idleTimerExpired(asio::error_code const& error);
+//    void startIdleTimer();
+//    void idleTimerExpired(asio::error_code const& error);
     std::chrono::seconds getIOTimeout() const;
 
     // helper method to acknownledge that some bytes were received
@@ -201,10 +203,14 @@ class Peer : public std::enable_shared_from_this<Peer>,
         return mRemoteOverlayVersion;
     }
 
-    PeerBareAddress const&
-    getAddress()
-    {
-        return mAddress;
+    my::PeerName const&
+    getName() const {
+        return mPeerName;
+    }
+
+    my::PeerName const&
+    getMyName() const {
+        return mMyName;
     }
 
     NodeID
@@ -214,24 +220,18 @@ class Peer : public std::enable_shared_from_this<Peer>,
     }
 
     std::string toString();
-    virtual std::string getIP() const = 0;
 
     // These exist mostly to be overridden in TCPPeer and callable via
     // shared_ptr<Peer> as a captured shared_from_this().
-    virtual void connectHandler(asio::error_code const& ec);
+    virtual void connectHandler();
 
     virtual void
-    writeHandler(asio::error_code const& error, size_t bytes_transferred)
+    writeHandler(size_t bytes_ransferred)
     {
     }
 
     virtual void
-    readHeaderHandler(asio::error_code const& error, size_t bytes_transferred)
-    {
-    }
-
-    virtual void
-    readBodyHandler(asio::error_code const& error, size_t bytes_transferred)
+    readMessageHandler()
     {
     }
 

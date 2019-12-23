@@ -14,7 +14,11 @@
 #include <memory>
 #include <string>
 
+#include "my_classes/Name.hpp"
+
 #define DEFAULT_PEER_PORT 11625
+static const my::PeerName DEFAULT_PEER_NAME{"00000000"};
+
 
 namespace stellar
 {
@@ -26,23 +30,14 @@ struct HistoryArchiveConfiguration
     std::string mMkdirCmd;
 };
 
-enum class ValidationThresholdLevels : int
-{
-    SIMPLE_MAJORITY = 0,
-    BYZANTINE_FAULT_TOLERANCE = 1,
-    ALL_REQUIRED = 2
-};
-
 class Config : public std::enable_shared_from_this<Config>
 {
     enum class ValidatorQuality : int
     {
         VALIDATOR_LOW_QUALITY = 0,
         VALIDATOR_MED_QUALITY = 1,
-        VALIDATOR_HIGH_QUALITY = 2,
-        VALIDATOR_CRITICAL_QUALITY = 3
+        VALIDATOR_HIGH_QUALITY = 2
     };
-
     struct ValidatorEntry
     {
         std::string mName;
@@ -52,7 +47,7 @@ class Config : public std::enable_shared_from_this<Config>
         bool mHasHistory;
     };
 
-    void validateConfig(ValidationThresholdLevels thresholdLevel);
+    void validateConfig(bool mixed);
     void loadQset(std::shared_ptr<cpptoml::table> group, SCPQuorumSet& qset,
                   int level);
 
@@ -218,23 +213,6 @@ class Config : public std::enable_shared_from_this<Config>
     // you want to make that trade.
     bool DISABLE_XDR_FSYNC;
 
-    // A string specifying a stream to write fine-grained metadata to for each
-    // ledger close while running. This will be opened at startup and
-    // synchronously streamed-to during both catchup and live ledger-closing.
-    //
-    // Streams may be specified either as a pathname (typically a named FIFO on
-    // POSIX or a named pipe on Windows, though plain files also work) or a
-    // string of the form "fd:N" for some integer N which, on POSIX, specifies
-    // the existing open file descriptor N inherited by the process (for example
-    // to write to an anonymous pipe).
-    //
-    // As a further safety check, this option is mutually exclusive with
-    // NODE_IS_VALIDATOR, as its typical use writing to a pipe with a reader
-    // process on the other end introduces a potentially-unbounded synchronous
-    // delay in closing a ledger, and should not be used on a node participating
-    // in consensus, only a passive "watcher" node.
-    std::string METADATA_OUTPUT_STREAM;
-
     // Set of cursors added at each startup with value '1'.
     std::vector<std::string> KNOWN_CURSORS;
 
@@ -261,7 +239,8 @@ class Config : public std::enable_shared_from_this<Config>
     std::string NETWORK_PASSPHRASE; // identifier for the network
 
     // overlay config
-    unsigned short PEER_PORT;
+//    unsigned short PEER_PORT;
+    my::PeerName PEER_NAME;
     unsigned short TARGET_PEER_CONNECTIONS;
     unsigned short MAX_PENDING_CONNECTIONS;
     int MAX_ADDITIONAL_PEER_CONNECTIONS;
@@ -274,8 +253,8 @@ class Config : public std::enable_shared_from_this<Config>
     static constexpr auto const REALLY_DEAD_NUM_FAILURES_CUTOFF = 120;
 
     // Peers we will always try to stay connected to
-    std::vector<std::string> PREFERRED_PEERS;
-    std::vector<std::string> KNOWN_PEERS;
+    std::vector<my::PeerName> PREFERRED_PEERS;
+    std::vector<my::PeerName> KNOWN_PEERS;
 
     // Preference can also be expressed by peer pubkey
     std::vector<std::string> PREFERRED_PEER_KEYS;
@@ -335,18 +314,6 @@ class Config : public std::enable_shared_from_this<Config>
     // SQL load. Note that it should be significantly smaller than size of
     // the entry cache
     size_t PREFETCH_BATCH_SIZE;
-
-    // The version of TransactionMeta that will be generated. Acceptable values
-    // are 1 (default) and 2. Set to 2 only if downstream systems have been
-    // updated to handle TransactionMetaV2.
-    int32_t SUPPORTED_META_VERSION;
-
-#ifdef BUILD_TESTS
-    // If set to true, the application will be aware this run is for a test
-    // case.  This is used right now in the signal handler to exit() instead of
-    // doing a graceful shutdown
-    bool TEST_CASES_ENABLED;
-#endif
 
     Config();
 

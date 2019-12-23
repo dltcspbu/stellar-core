@@ -16,16 +16,13 @@ namespace stellar
 
 DownloadApplyTxsWork::DownloadApplyTxsWork(
     Application& app, TmpDir const& downloadDir, LedgerRange const& range,
-    LedgerHeaderHistoryEntry& lastApplied, bool waitForPublish,
-    std::shared_ptr<HistoryArchive> archive)
+    LedgerHeaderHistoryEntry& lastApplied)
     : BatchWork(app, "download-apply-ledgers")
     , mRange(range)
     , mDownloadDir(downloadDir)
     , mLastApplied(lastApplied)
     , mCheckpointToQueue(
           app.getHistoryManager().checkpointContainingLedger(range.mFirst))
-    , mWaitForPublish(waitForPublish)
-    , mArchive(archive)
 {
 }
 
@@ -42,8 +39,7 @@ DownloadApplyTxsWork::yieldMoreWork()
                           << " for checkpoint " << mCheckpointToQueue;
     FileTransferInfo ft(mDownloadDir, HISTORY_FILE_TYPE_TRANSACTIONS,
                         mCheckpointToQueue);
-    auto getAndUnzip =
-        std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft, mArchive);
+    auto getAndUnzip = std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft);
 
     auto const& hm = mApp.getHistoryManager();
     auto low = std::max(LedgerManager::GENESIS_LEDGER_SEQ,
@@ -57,39 +53,13 @@ DownloadApplyTxsWork::yieldMoreWork()
     if (mLastYieldedWork)
     {
         auto prev = mLastYieldedWork;
-        bool pqFellBehind = false;
-        auto predicate = [
-            prev, pqFellBehind, waitForPublish = mWaitForPublish, &hm
-        ]() mutable
-        {
+        auto predicate = [prev]() {
             if (!prev)
             {
                 throw std::runtime_error("Download and apply txs: related Work "
                                          "is destroyed unexpectedly");
             }
-
-            // First, ensure download work is finished
-            if (prev->getState() != State::WORK_SUCCESS)
-            {
-                return false;
-            }
-
-            // Second, check if publish queue isn't too far off
-            bool res = true;
-            if (waitForPublish)
-            {
-                auto length = hm.publishQueueLength();
-                if (length <= CatchupWork::PUBLISH_QUEUE_UNBLOCK_APPLICATION)
-                {
-                    pqFellBehind = false;
-                }
-                else if (length > CatchupWork::PUBLISH_QUEUE_MAX_SIZE)
-                {
-                    pqFellBehind = true;
-                }
-                res = !pqFellBehind;
-            }
-            return res;
+            return prev->getState() == State::WORK_SUCCESS;
         };
         seq.push_back(std::make_shared<ConditionalWork>(
             mApp, "conditional-" + apply->getName(), predicate, apply));

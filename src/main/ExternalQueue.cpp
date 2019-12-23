@@ -7,7 +7,6 @@
 #include "Application.h"
 #include "database/Database.h"
 #include "ledger/LedgerManager.h"
-#include "util/GlobalChecks.h"
 #include "util/Logging.h"
 #include <limits>
 #include <regex>
@@ -25,7 +24,6 @@ string ExternalQueue::kSQLCreateStatement =
 
 ExternalQueue::ExternalQueue(Application& app) : mApp(app)
 {
-    releaseAssertOrThrow(mApp.modeHasDatabase());
 }
 
 void

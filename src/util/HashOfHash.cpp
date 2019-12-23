@@ -1,5 +1,5 @@
 #include "HashOfHash.h"
-#include "crypto/ShortHash.h"
+#include "crypto/ByteSliceHasher.h"
 
 namespace std
 {

@@ -14,11 +14,7 @@
 
 #ifdef _WIN32
 #include <direct.h>
-
-// Latest version of VC++ complains without this define (confused by C++ 17)
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING 1
-#include <experimental/filesystem>
-
+#include <filesystem>
 #include <io.h>
 #else
 #include <dirent.h>
@@ -434,8 +430,7 @@ hexStr(uint32_t checkpointNum)
 std::string
 hexDir(std::string const& hexStr)
 {
-    static const std::regex rx(
-        "([[:xdigit:]]{2})([[:xdigit:]]{2})([[:xdigit:]]{2}).*");
+    std::regex rx("([[:xdigit:]]{2})([[:xdigit:]]{2})([[:xdigit:]]{2}).*");
     std::smatch sm;
     bool matched = std::regex_match(hexStr, sm, rx);
     assert(matched);
@@ -466,7 +461,7 @@ remoteName(std::string const& type, std::string const& hexStr,
 void
 checkGzipSuffix(std::string const& filename)
 {
-    static const std::string suf(".gz");
+    std::string suf(".gz");
     if (!(filename.size() >= suf.size() &&
           equal(suf.rbegin(), suf.rend(), filename.rbegin())))
     {
@@ -477,7 +472,7 @@ checkGzipSuffix(std::string const& filename)
 void
 checkNoGzipSuffix(std::string const& filename)
 {
-    static const std::string suf(".gz");
+    std::string suf(".gz");
     if (filename.size() >= suf.size() &&
         equal(suf.rbegin(), suf.rend(), filename.rbegin()))
     {

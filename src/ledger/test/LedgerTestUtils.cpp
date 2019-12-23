@@ -14,6 +14,8 @@
 #include <xdrpp/autocheck.h>
 #include <xdrpp/xdrpp/marshal.h>
 
+using std::move;
+
 namespace stellar
 {
 namespace LedgerTestUtils
@@ -267,35 +269,35 @@ static auto validLedgerEntryGenerator = autocheck::map(
             break;
         }
 
-        return le;
+        return move(le);
     },
     autocheck::generator<LedgerEntry>());
 
 static auto validAccountEntryGenerator = autocheck::map(
     [](AccountEntry&& ae, size_t s) {
         makeValid(ae);
-        return ae;
+        return move(ae);
     },
     autocheck::generator<AccountEntry>());
 
 static auto validTrustLineEntryGenerator = autocheck::map(
     [](TrustLineEntry&& tl, size_t s) {
         makeValid(tl);
-        return tl;
+        return move(tl);
     },
     autocheck::generator<TrustLineEntry>());
 
 static auto validOfferEntryGenerator = autocheck::map(
     [](OfferEntry&& o, size_t s) {
         makeValid(o);
-        return o;
+        return move(o);
     },
     autocheck::generator<OfferEntry>());
 
 static auto validDataEntryGenerator = autocheck::map(
     [](DataEntry&& d, size_t s) {
         makeValid(d);
-        return d;
+        return move(d);
     },
     autocheck::generator<DataEntry>());
 

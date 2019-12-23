@@ -467,20 +467,16 @@ CatchupSimulation::generateRandomLedger(uint32_t version)
     auto carol = TestAccount{mApp, getAccount("carol")};
 
     // Root sends to alice every tx, bob every other tx, carol every 4rd tx.
-    if (ledgerSeq < 5)
-    {
-        txSet->add(root.tx({createAccount(alice, big)}));
-        txSet->add(root.tx({createAccount(bob, big)}));
-        txSet->add(root.tx({createAccount(carol, big)}));
-    }
-    // Allow an occasional empty ledger
-    else if (rand_flip() || rand_flip())
-    {
-        txSet->add(root.tx({payment(alice, big)}));
-        txSet->add(root.tx({payment(bob, big)}));
-        txSet->add(root.tx({payment(carol, big)}));
+    txSet->add(root.tx({createAccount(alice, big)}));
+    txSet->add(root.tx({createAccount(bob, big)}));
+    txSet->add(root.tx({createAccount(carol, big)}));
+    txSet->add(root.tx({payment(alice, big)}));
+    txSet->add(root.tx({payment(bob, big)}));
+    txSet->add(root.tx({payment(carol, big)}));
 
-        // They all randomly send a little to one another every ledger after #4
+    // They all randomly send a little to one another every ledger after #4
+    if (ledgerSeq > 4)
+    {
         if (rand_flip())
             txSet->add(alice.tx({payment(bob, small)}));
         if (rand_flip())
@@ -623,7 +619,7 @@ CatchupSimulation::crankUntil(Application::pointer app,
                               VirtualClock::duration timeout)
 {
     auto start = std::chrono::system_clock::now();
-    while (!predicate())
+    while (!app->getWorkScheduler().allChildrenDone() || !predicate())
     {
         app->getClock().crank(false);
         auto current = std::chrono::system_clock::now();
@@ -638,8 +634,7 @@ CatchupSimulation::crankUntil(Application::pointer app,
 Application::pointer
 CatchupSimulation::createCatchupApplication(uint32_t count,
                                             Config::TestDbMode dbMode,
-                                            std::string const& appName,
-                                            bool publish)
+                                            std::string const& appName)
 {
     CLOG(INFO, "History") << "****";
     CLOG(INFO, "History") << "**** Create app for catchup: '" << appName << "'";
@@ -653,12 +648,11 @@ CatchupSimulation::createCatchupApplication(uint32_t count,
     mSpawnedAppsClocks.emplace_front();
     return createTestApplication(
         mSpawnedAppsClocks.front(),
-        mHistoryConfigurator->configure(mCfgs.back(), publish));
+        mHistoryConfigurator->configure(mCfgs.back(), false));
 }
 
 bool
-CatchupSimulation::catchupOffline(Application::pointer app, uint32_t toLedger,
-                                  bool extraValidation)
+CatchupSimulation::catchupOffline(Application::pointer app, uint32_t toLedger)
 {
     CLOG(INFO, "History") << "starting offline catchup with toLedger="
                           << toLedger;
@@ -666,11 +660,10 @@ CatchupSimulation::catchupOffline(Application::pointer app, uint32_t toLedger,
     auto startCatchupMetrics = getCatchupMetrics(app);
     auto& lm = app->getLedgerManager();
     auto lastLedger = lm.getLastClosedLedgerNum();
-    auto mode = extraValidation ? CatchupConfiguration::Mode::OFFLINE_COMPLETE
-                                : CatchupConfiguration::Mode::OFFLINE_BASIC;
     auto catchupConfiguration =
-        CatchupConfiguration{toLedger, app->getConfig().CATCHUP_RECENT, mode};
-    lm.startCatchup(catchupConfiguration, nullptr);
+        CatchupConfiguration{toLedger, app->getConfig().CATCHUP_RECENT,
+                             CatchupConfiguration::Mode::OFFLINE};
+    lm.startCatchup(catchupConfiguration);
     REQUIRE(!app->getClock().getIOContext().stopped());
 
     auto finished = [&]() {
@@ -679,7 +672,7 @@ CatchupSimulation::catchupOffline(Application::pointer app, uint32_t toLedger,
     };
     crankUntil(app, finished, std::chrono::seconds{30});
 
-    // Finished successfully
+    // Finished succesfully
     auto success = lm.isSynced();
     if (success)
     {
@@ -691,13 +684,7 @@ CatchupSimulation::catchupOffline(Application::pointer app, uint32_t toLedger,
 
         REQUIRE(catchupPerformedWork ==
                 computeCatchupPerformedWork(lastLedger, catchupConfiguration,
-                                            *app));
-        if (app->getHistoryArchiveManager().hasAnyWritableHistoryArchive())
-        {
-            auto& hm = app->getHistoryManager();
-            REQUIRE(hm.getPublishQueueCount() - hm.getPublishSuccessCount() <=
-                    CatchupWork::PUBLISH_QUEUE_MAX_SIZE);
-        }
+                                            app->getHistoryManager()));
     }
 
     validateCatchup(app);
@@ -781,7 +768,7 @@ CatchupSimulation::catchupOnline(Application::pointer app, uint32_t initLedger,
 
         REQUIRE(catchupPerformedWork ==
                 computeCatchupPerformedWork(lastLedger, catchupConfiguration,
-                                            *app));
+                                            app->getHistoryManager()));
 
         CLOG(INFO, "History") << "Caught up";
     }
@@ -942,16 +929,15 @@ CatchupSimulation::getCatchupMetrics(Application::pointer app)
 CatchupPerformedWork
 CatchupSimulation::computeCatchupPerformedWork(
     uint32_t lastClosedLedger, CatchupConfiguration const& catchupConfiguration,
-    Application& app)
+    HistoryManager const& historyManager)
 {
-    auto const& hm = app.getHistoryManager();
-
     auto catchupRange =
-        CatchupRange{lastClosedLedger, catchupConfiguration, hm};
+        CatchupRange{lastClosedLedger, catchupConfiguration, historyManager};
     auto verifyCheckpointRange = CheckpointRange{
-        {catchupRange.mLedgers.mFirst - 1, catchupRange.getLast()}, hm};
+        {catchupRange.mLedgers.mFirst - 1, catchupRange.getLast()},
+        historyManager};
     auto applyCheckpointRange = CheckpointRange{
-        {catchupRange.mLedgers.mFirst, catchupRange.getLast()}, hm};
+        {catchupRange.mLedgers.mFirst, catchupRange.getLast()}, historyManager};
 
     uint32_t historyArchiveStatesDownloaded = 1;
     if (catchupRange.mApplyBuckets &&
@@ -962,9 +948,10 @@ CatchupSimulation::computeCatchupPerformedWork(
 
     auto ledgersDownloaded = verifyCheckpointRange.count();
     auto transactionsDownloaded = applyCheckpointRange.count();
-    auto firstVerifiedLedger = std::max(LedgerManager::GENESIS_LEDGER_SEQ,
-                                        verifyCheckpointRange.mFirst + 1 -
-                                            hm.getCheckpointFrequency());
+    auto firstVerifiedLedger =
+        std::max(LedgerManager::GENESIS_LEDGER_SEQ,
+                 verifyCheckpointRange.mFirst + 1 -
+                     historyManager.getCheckpointFrequency());
     auto ledgersVerified =
         catchupConfiguration.toLedger() - firstVerifiedLedger + 1;
     auto transactionsApplied = catchupRange.mLedgers.mCount;

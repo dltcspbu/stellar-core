@@ -13,28 +13,49 @@ listens for peer connections.
 When found passes them to the OverlayManagerImpl
 */
 
-namespace stellar
-{
-class Application;
-class PeerDoorStub;
+namespace stellar {
+  class Application;
 
-class PeerDoor
-{
+  class PeerDoorStub;
+
+  class PeerDoor {
   protected:
-    Application& mApp;
-    asio::ip::tcp::acceptor mAcceptor;
+    Application &mApp;
+  public:
+    class MH : public messageHandler {
+      std::shared_ptr<messageBroker> MB;
+      my::PeerName myName;
+      PeerDoor *PD;
+    public:
+      MH(std::shared_ptr<messageBroker> ptr, my::PeerName const &name, PeerDoor *PDPtr) : MB(move(ptr)), myName(name),
+                                                                                          PD(PDPtr) {}
+
+      ~MH() {
+        std::cout << "CALLED" << std::endl;
+      }
+
+      void handle(const string &m) override;
+    };
+
+  protected:
+    std::vector<::shared_ptr<MH>> callbacks;
 
     virtual void acceptNextPeer();
-    virtual void handleKnock(std::shared_ptr<TCPPeer::SocketType> pSocket);
+
+    virtual void
+    handleKnock(std::shared_ptr<messageBroker> MB, my::PeerName const &myName, my::PeerName const &peerName);
 
     friend PeerDoorStub;
 
   public:
     typedef std::shared_ptr<PeerDoor> pointer;
 
-    PeerDoor(Application&);
+    explicit PeerDoor(Application &);
 
     void start();
+
     void close();
-};
+
+    ~PeerDoor();
+  };
 }

@@ -436,10 +436,6 @@ class MinQuorumEnumerator
     // any set enumerated by this enumerator and its children.
     BitSet mPerimeter;
 
-    // The initial value of mRemaining at the root of the search, representing
-    // the overall SCC we're considering subsets of.
-    BitSet const& mScanSCC;
-
     // Checker that owns us, contains state of stats, graph, etc.
     QuorumIntersectionCheckerImpl const& mQic;
 
@@ -451,10 +447,8 @@ class MinQuorumEnumerator
 
   public:
     MinQuorumEnumerator(BitSet const& committed, BitSet const& remaining,
-                        BitSet const& scanSCC,
                         QuorumIntersectionCheckerImpl const& qic);
 
-    bool hasDisjointQuorum(BitSet const& nodes) const;
     bool anyMinQuorumHasDisjointQuorum();
 };
 
@@ -471,7 +465,7 @@ class QuorumIntersectionCheckerImpl : public stellar::QuorumIntersectionChecker
     {
         size_t mTotalNodes = {0};
         size_t mNumSCCs = {0};
-        size_t mScanSCCSize = {0};
+        size_t mMaxSCC = {0};
         size_t mCallsStarted = {0};
         size_t mFirstRecursionsTaken = {0};
         size_t mSecondRecursionsTaken = {0};
@@ -508,10 +502,10 @@ class QuorumIntersectionCheckerImpl : public stellar::QuorumIntersectionChecker
     std::unordered_map<stellar::PublicKey, size_t> mPubKeyBitNums;
     QGraph mGraph;
 
-    // This just calculates SCCs, from which we extract the first one found with
-    // a quorum, which (assuming no other SCCs have quorums) we'll use for the
-    // remainder of the search.
+    // This just calculates SCCs and stores the maximal one, which we use for
+    // the remainder of the search.
     TarjanSCCCalculator mTSC;
+    BitSet mMaxSCC;
 
     QBitSet convertSCPQuorumSet(stellar::SCPQuorumSet const& sqs);
     void buildGraph(stellar::QuorumTracker::QuorumMap const& qmap);
@@ -522,6 +516,7 @@ class QuorumIntersectionCheckerImpl : public stellar::QuorumIntersectionChecker
     BitSet contractToMaximalQuorum(BitSet nodes) const;
     bool isAQuorum(BitSet const& nodes) const;
     bool isMinimalQuorum(BitSet const& nodes) const;
+    bool hasDisjointQuorum(BitSet const& nodes) const;
     void noteFoundDisjointQuorums(BitSet const& nodes,
                                   BitSet const& disj) const;
     std::string nodeName(size_t node) const;

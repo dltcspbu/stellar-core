@@ -1,0 +1,82 @@
+cmake_minimum_required(VERSION 3.7)
+project(stellar_core)
+
+# first export CMAKE_C_COMPILER=clang
+# first export CMAKE_CXX_COMPILER=clang++
+# then
+# ./autogen.sh && ./configure
+
+set(CMAKE_CXX_STANDARD 14)
+
+execute_process (
+        COMMAND grep -c ^processor /proc/cpuinfo
+        OUTPUT_VARIABLE thread_num
+)
+
+message(thread_num: ${thread_num})
+
+add_custom_target(stellar_core ALL COMMAND make -j ${thread_num} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+include_directories(.)
+include_directories(lib)
+include_directories(lib/asio/asio/include)
+include_directories(lib/asio/asio/src)
+include_directories(lib/autocheck)
+include_directories(lib/autocheck/include)
+include_directories(lib/autocheck/include/autocheck)
+include_directories(lib/cereal/include)
+include_directories(lib/cereal/include/cereal)
+include_directories(lib/cereal/include/cereal/archives)
+include_directories(lib/cereal/include/cereal/details)
+include_directories(lib/cereal/include/cereal/external)
+include_directories(lib/cereal/include/cereal/external/rapidjson)
+include_directories(lib/cereal/include/cereal/external/rapidjson/error)
+include_directories(lib/cereal/include/cereal/external/rapidjson/internal)
+include_directories(lib/cereal/include/cereal/external/rapidjson/msinttypes)
+include_directories(lib/cereal/include/cereal/external/rapidxml)
+include_directories(lib/cereal/include/cereal/types)
+include_directories(lib/cereal/include/cereal/types/concepts)
+include_directories(lib/cereal/sandbox/sandbox_shared_lib)
+include_directories(lib/cereal/unittests)
+include_directories(lib/http)
+include_directories(lib/json)
+include_directories(lib/libmedida/src)
+include_directories(lib/libmedida/test/gtest-1.6.0/fused-src/gtest)
+include_directories(lib/libmedida/test/gtest-1.6.0/include)
+include_directories(lib/libmedida/test/gtest-1.6.0/include/gtest)
+include_directories(lib/libmedida/test/gtest-1.6.0/include/gtest/internal)
+include_directories(lib/libmedida/test/gtest-1.6.0/samples)
+include_directories(lib/libmedida/test/gtest-1.6.0/src)
+include_directories(lib/libmedida/test/gtest-1.6.0/test)
+include_directories(lib/libmedida/test/gtest-1.6.0/xcode/Samples/FrameworkSample)
+include_directories(lib/libsodium/builds)
+include_directories(lib/libsodium/builds/msvc)
+include_directories(lib/libsodium/src)
+include_directories(lib/libsodium/test/default)
+include_directories(lib/libsodium/test/quirks)
+include_directories(lib/soci/src/backends/postgresql)
+include_directories(lib/soci/src/backends/sqlite3)
+include_directories(lib/soci/src/core)
+include_directories(lib/sqlite)
+include_directories(lib/util)
+include_directories(lib/xdrpp)
+include_directories(lib/xdrpp/compat)
+include_directories(lib/xdrpp/msvc_xdrpp)
+include_directories(lib/xdrpp/msvc_xdrpp/include)
+include_directories(lib/xdrpp/msvc_xdrpp/include/xdrpp)
+include_directories(lib/xdrpp/xdrc)
+include_directories(lib/xdrpp/xdrpp)
+include_directories(src)
+
+set(sourcedir src)
+set(sourcefiles ${sourcedir}/*.cpp)
+set(headerfiles ${sourcedir}/*.h*)
+set(sourcedir2 lib)
+set(sourcefiles2 ${sourcedir2}/*.cpp)
+set(headerfiles2 ${sourcedir2}/*.h*)
+file(GLOB_RECURSE sources ${sourcefiles})
+file(GLOB_RECURSE headers ${headerfiles})
+file(GLOB_RECURSE sources2 ${sourcefiles2})
+file(GLOB_RECURSE headers2 ${headerfiles2})
+
+add_executable(highlighter EXCLUDE_FROM_ALL ${sources} ${headers} ${sources2} ${headers2} config.h)

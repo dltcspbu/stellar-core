@@ -43,6 +43,7 @@ StateSnapshot::StateSnapshot(Application& app, HistoryArchiveState const& state)
     {
         throw std::runtime_error("Invalid HAS: malformed bucketlist");
     }
+    mLocalState.prepareForPublish(mApp);
 }
 
 bool

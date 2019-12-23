@@ -9,11 +9,12 @@
 namespace stellar
 {
 
-MergeKey::MergeKey(bool keepDeadEntries,
+MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
                    std::shared_ptr<Bucket> const& inputCurr,
                    std::shared_ptr<Bucket> const& inputSnap,
                    std::vector<std::shared_ptr<Bucket>> const& inputShadows)
-    : mKeepDeadEntries(keepDeadEntries)
+    : mMaxProtocolVersion(maxProtocolVersion)
+    , mKeepDeadEntries(keepDeadEntries)
     , mInputCurrBucket(inputCurr->getHash())
     , mInputSnapBucket(inputSnap->getHash())
 {
@@ -24,10 +25,22 @@ MergeKey::MergeKey(bool keepDeadEntries,
     }
 }
 
+MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
+                   Hash& inputCurr, Hash& inputSnap,
+                   std::vector<Hash> const& inputShadows)
+    : mMaxProtocolVersion(maxProtocolVersion)
+    , mKeepDeadEntries(keepDeadEntries)
+    , mInputCurrBucket(inputCurr)
+    , mInputSnapBucket(inputSnap)
+    , mInputShadowBuckets(inputShadows)
+{
+}
+
 bool
 MergeKey::operator==(MergeKey const& other) const
 {
-    return mKeepDeadEntries == other.mKeepDeadEntries &&
+    return mMaxProtocolVersion == other.mMaxProtocolVersion &&
+           mKeepDeadEntries == other.mKeepDeadEntries &&
            mInputCurrBucket == other.mInputCurrBucket &&
            mInputSnapBucket == other.mInputSnapBucket &&
            mInputShadowBuckets == other.mInputShadowBuckets;
@@ -59,7 +72,7 @@ size_t
 hash<stellar::MergeKey>::operator()(stellar::MergeKey const& key) const noexcept
 {
     std::ostringstream oss;
-    oss << key.mKeepDeadEntries << ','
+    oss << key.mMaxProtocolVersion << ',' << key.mKeepDeadEntries << ','
         << stellar::binToHex(key.mInputCurrBucket) << ','
         << stellar::binToHex(key.mInputSnapBucket);
     for (auto const& e : key.mInputShadowBuckets)

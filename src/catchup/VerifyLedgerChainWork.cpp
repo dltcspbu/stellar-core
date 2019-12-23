@@ -102,7 +102,7 @@ VerifyLedgerChainWork::VerifyLedgerChainWork(
 std::string
 VerifyLedgerChainWork::getStatus() const
 {
-    if (!isDone() && !isAborting())
+    if (getState() == State::WORK_RUNNING)
     {
         std::string task = "verifying checkpoint";
         return fmtProgress(mApp, task, mRange.mFirst, mRange.mLast,

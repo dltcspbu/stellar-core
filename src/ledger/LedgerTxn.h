@@ -11,7 +11,6 @@
 #include <ledger/LedgerHashUtils.h>
 #include <map>
 #include <memory>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -215,42 +214,15 @@ struct LedgerEntry;
 struct LedgerKey;
 struct LedgerRange;
 
-struct OfferDescriptor
-{
-    Price price;
-    int64_t offerID;
-};
-bool operator==(OfferDescriptor const& lhs, OfferDescriptor const& rhs);
-
 bool isBetterOffer(LedgerEntry const& lhsEntry, LedgerEntry const& rhsEntry);
-bool isBetterOffer(OfferDescriptor const& lhs, LedgerEntry const& rhsEntry);
-bool isBetterOffer(OfferDescriptor const& lhs, OfferDescriptor const& rhs);
 
-struct IsBetterOfferComparator
-{
-    bool operator()(OfferDescriptor const& lhs,
-                    OfferDescriptor const& rhs) const;
-};
-
-struct AssetPair
-{
-    Asset buying;
-    Asset selling;
-};
-bool operator==(AssetPair const& lhs, AssetPair const& rhs);
-
-struct AssetPairHash
-{
-    size_t operator()(AssetPair const& key) const;
-};
+class AbstractLedgerTxn;
 
 struct InflationWinner
 {
     AccountID accountID;
     int64_t votes;
 };
-
-class AbstractLedgerTxn;
 
 // LedgerTxnDelta represents the difference between a LedgerTxn and its
 // parent. Used in the Invariants subsystem.
@@ -304,32 +276,6 @@ class EntryIterator
     LedgerKey const& key() const;
 };
 
-class WorstBestOfferIterator
-{
-  public:
-    class AbstractImpl;
-
-  private:
-    std::unique_ptr<AbstractImpl> mImpl;
-
-    std::unique_ptr<AbstractImpl> const& getImpl() const;
-
-  public:
-    WorstBestOfferIterator(std::unique_ptr<AbstractImpl>&& impl);
-
-    WorstBestOfferIterator(WorstBestOfferIterator const& other);
-
-    WorstBestOfferIterator(WorstBestOfferIterator&& other);
-
-    WorstBestOfferIterator& operator++();
-
-    explicit operator bool() const;
-
-    AssetPair const& assets() const;
-
-    std::shared_ptr<OfferDescriptor const> const& offerDescriptor() const;
-};
-
 // An abstraction for an object that can be the parent of an AbstractLedgerTxn
 // (discussed below). Allows children to commit atomically to the parent. Has no
 // notion of a LedgerTxnEntry or LedgerTxnHeader (discussed respectively in
@@ -366,10 +312,8 @@ class AbstractLedgerTxnParent
     //     buying or selling the specified asset.
     virtual std::unordered_map<LedgerKey, LedgerEntry> getAllOffers() = 0;
     virtual std::shared_ptr<LedgerEntry const>
-    getBestOffer(Asset const& buying, Asset const& selling) = 0;
-    virtual std::shared_ptr<LedgerEntry const>
     getBestOffer(Asset const& buying, Asset const& selling,
-                 OfferDescriptor const& worseThan) = 0;
+                 std::unordered_set<LedgerKey>& exclude) = 0;
     virtual std::unordered_map<LedgerKey, LedgerEntry>
     getOffersByAccountAndAsset(AccountID const& account,
                                Asset const& asset) = 0;
@@ -391,48 +335,6 @@ class AbstractLedgerTxnParent
     // or if the corresponding LedgerEntry has been erased.
     virtual std::shared_ptr<LedgerEntry const>
     getNewestVersion(LedgerKey const& key) const = 0;
-
-    // Return the count of the number of ledger objects of type `let`. Will
-    // throw when called on anything other than a (real or stub) root LedgerTxn.
-    virtual uint64_t countObjects(LedgerEntryType let) const = 0;
-
-    // Return the count of the number of ledger objects of type `let` within
-    // range of ledgers `ledgers`. Will throw when called on anything other than
-    // a (real or stub) root LedgerTxn.
-    virtual uint64_t countObjects(LedgerEntryType let,
-                                  LedgerRange const& ledgers) const = 0;
-
-    // Delete all ledger entries modified on-or-after `ledger`. Will throw
-    // when called on anything other than a (real or stub) root LedgerTxn.
-    virtual void
-    deleteObjectsModifiedOnOrAfterLedger(uint32_t ledger) const = 0;
-
-    // Delete all account ledger entries in the database. Will throw when called
-    // on anything other than a (real or stub) root LedgerTxn.
-    virtual void dropAccounts() = 0;
-
-    // Delete all account-data ledger entries. Will throw when called on
-    // anything other than a (real or stub) root LedgerTxn.
-    virtual void dropData() = 0;
-
-    // Delete all offer ledger entries. Will throw when called on anything other
-    // than a (real or stub) root LedgerTxn.
-    virtual void dropOffers() = 0;
-
-    // Delete all trustline ledger entries. Will throw when called on anything
-    // other than a (real or stub) root LedgerTxn.
-    virtual void dropTrustLines() = 0;
-
-    // Return the current cache hit rate for prefetched ledger entries, as a
-    // fraction from 0.0 to 1.0. Will throw when called on anything other than a
-    // (real or stub) root LedgerTxn.
-    virtual double getPrefetchHitRate() const = 0;
-
-    // Prefetch a set of ledger entries into memory, anticipating their use.
-    // This is purely advisory and can be a no-op, or do any level of actual
-    // work, while still being correct. Will throw when called on anything other
-    // than a (real or stub) root LedgerTxn.
-    virtual uint32_t prefetch(std::unordered_set<LedgerKey> const& keys) = 0;
 };
 
 // An abstraction for an object that is an AbstractLedgerTxnParent and has
@@ -533,12 +435,6 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
                                std::vector<LedgerEntry>& liveEntries,
                                std::vector<LedgerKey>& deadEntries) = 0;
 
-    // getWorstBestOfferIterator allows a parent AbstractLedgerTxn to get the
-    // worst best offers (an offer is a worst best offer if every better offer
-    // in any parent AbstractLedgerTxn has already been loaded). This function
-    // is intended for use with commit.
-    virtual WorstBestOfferIterator getWorstBestOfferIterator() = 0;
-
     // loadAllOffers, loadBestOffer, and loadOffersByAccountAndAsset are used to
     // handle some specific queries related to Offers. These functions are built
     // on top of load, and so share many properties with that function.
@@ -604,12 +500,8 @@ class LedgerTxn final : public AbstractLedgerTxn
     std::unordered_map<LedgerKey, LedgerEntry> getAllOffers() override;
 
     std::shared_ptr<LedgerEntry const>
-    getBestOffer(Asset const& buying, Asset const& selling) override;
-    std::shared_ptr<LedgerEntry const>
     getBestOffer(Asset const& buying, Asset const& selling,
-                 OfferDescriptor const& worseThan) override;
-
-    WorstBestOfferIterator getWorstBestOfferIterator() override;
+                 std::unordered_set<LedgerKey>& exclude) override;
 
     LedgerEntryChanges getChanges() override;
 
@@ -657,25 +549,6 @@ class LedgerTxn final : public AbstractLedgerTxn
     void rollbackChild() override;
 
     void unsealHeader(std::function<void(LedgerHeader&)> f) override;
-
-    uint64_t countObjects(LedgerEntryType let) const override;
-    uint64_t countObjects(LedgerEntryType let,
-                          LedgerRange const& ledgers) const override;
-    void deleteObjectsModifiedOnOrAfterLedger(uint32_t ledger) const override;
-    void dropAccounts() override;
-    void dropData() override;
-    void dropOffers() override;
-    void dropTrustLines() override;
-    double getPrefetchHitRate() const override;
-    uint32_t prefetch(std::unordered_set<LedgerKey> const& keys) override;
-
-#ifdef BUILD_TESTS
-    std::unordered_map<
-        AssetPair,
-        std::multimap<OfferDescriptor, LedgerKey, IsBetterOfferComparator>,
-        AssetPairHash> const&
-    getOrderBook();
-#endif
 };
 
 class LedgerTxnRoot : public AbstractLedgerTxnParent
@@ -693,16 +566,16 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     void commitChild(EntryIterator iter, LedgerTxnConsistency cons) override;
 
-    uint64_t countObjects(LedgerEntryType let) const override;
+    uint64_t countObjects(LedgerEntryType let) const;
     uint64_t countObjects(LedgerEntryType let,
-                          LedgerRange const& ledgers) const override;
+                          LedgerRange const& ledgers) const;
 
-    void deleteObjectsModifiedOnOrAfterLedger(uint32_t ledger) const override;
+    void deleteObjectsModifiedOnOrAfterLedger(uint32_t ledger) const;
 
-    void dropAccounts() override;
-    void dropData() override;
-    void dropOffers() override;
-    void dropTrustLines() override;
+    void dropAccounts();
+    void dropData();
+    void dropOffers();
+    void dropTrustLines();
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     void resetForFuzzer();
@@ -711,10 +584,8 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
     std::unordered_map<LedgerKey, LedgerEntry> getAllOffers() override;
 
     std::shared_ptr<LedgerEntry const>
-    getBestOffer(Asset const& buying, Asset const& selling) override;
-    std::shared_ptr<LedgerEntry const>
     getBestOffer(Asset const& buying, Asset const& selling,
-                 OfferDescriptor const& worseThan) override;
+                 std::unordered_set<LedgerKey>& exclude) override;
 
     std::unordered_map<LedgerKey, LedgerEntry>
     getOffersByAccountAndAsset(AccountID const& account,
@@ -730,7 +601,7 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     void rollbackChild() override;
 
-    uint32_t prefetch(std::unordered_set<LedgerKey> const& keys) override;
-    double getPrefetchHitRate() const override;
+    uint32_t prefetch(std::unordered_set<LedgerKey> const& keys);
+    double getPrefetchHitRate() const;
 };
 }

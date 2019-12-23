@@ -65,12 +65,16 @@ FutureBucket::setLiveOutput(std::shared_ptr<Bucket> output)
 {
     mState = FB_LIVE_OUTPUT;
     mOutputBucketHash = binToHex(output->getHash());
-    mOutputBucket = output;
+    // Given an output bucket, fake-up a promise for it connected to
+    // the future so that it can be immediately retrieved.
+    std::promise<std::shared_ptr<Bucket>> promise;
+    mOutputBucket = promise.get_future().share();
+    promise.set_value(output);
     checkState();
 }
 
 static void
-checkHashEq(std::shared_ptr<Bucket> const& b, std::string const& h)
+checkHashEq(std::shared_ptr<Bucket> b, std::string const& h)
 {
     assert(b->getHash() == hexToBin256(h));
 }
@@ -95,9 +99,9 @@ FutureBucket::checkHashesMatch() const
     {
         checkHashEq(mInputCurrBucket, mInputCurrBucketHash);
     }
-    if (mergeComplete() && !mOutputBucketHash.empty())
+    if (mOutputBucket.valid() && mergeComplete() && !mOutputBucketHash.empty())
     {
-        checkHashEq(mOutputBucket, mOutputBucketHash);
+        checkHashEq(mOutputBucket.get(), mOutputBucketHash);
     }
 }
 
@@ -116,8 +120,7 @@ FutureBucket::checkState() const
         assert(mInputShadowBuckets.empty());
         assert(!mInputSnapBucket);
         assert(!mInputCurrBucket);
-        assert(!mOutputBucket);
-        assert(!mOutputBucketFuture.valid());
+        assert(!mOutputBucket.valid());
         assert(mInputShadowBucketHashes.empty());
         assert(mInputSnapBucketHash.empty());
         assert(mInputCurrBucketHash.empty());
@@ -127,16 +130,14 @@ FutureBucket::checkState() const
     case FB_LIVE_INPUTS:
         assert(mInputSnapBucket);
         assert(mInputCurrBucket);
-        assert(mOutputBucketFuture.valid());
-        assert(!mOutputBucket);
+        assert(mOutputBucket.valid());
         assert(mOutputBucketHash.empty());
         checkHashesMatch();
         break;
 
     case FB_LIVE_OUTPUT:
         assert(mergeComplete());
-        assert(mOutputBucket);
-        assert(!mOutputBucketFuture.valid());
+        assert(mOutputBucket.valid());
         assert(!mOutputBucketHash.empty());
         checkHashesMatch();
         break;
@@ -144,8 +145,7 @@ FutureBucket::checkState() const
     case FB_HASH_INPUTS:
         assert(!mInputSnapBucket);
         assert(!mInputCurrBucket);
-        assert(!mOutputBucket);
-        assert(!mOutputBucketFuture.valid());
+        assert(!mOutputBucket.valid());
         assert(!mInputSnapBucketHash.empty());
         assert(!mInputCurrBucketHash.empty());
         assert(mOutputBucketHash.empty());
@@ -154,8 +154,7 @@ FutureBucket::checkState() const
     case FB_HASH_OUTPUT:
         assert(!mInputSnapBucket);
         assert(!mInputCurrBucket);
-        assert(!mOutputBucket);
-        assert(!mOutputBucketFuture.valid());
+        assert(!mOutputBucket.valid());
         assert(mInputSnapBucketHash.empty());
         assert(mInputCurrBucketHash.empty());
         assert(!mOutputBucketHash.empty());
@@ -184,9 +183,8 @@ FutureBucket::clearOutput()
 {
     // NB: MSVC future<> implementation doesn't purge the task lambda (and
     // its captures) on invalidation (due to get()); must explicitly reset.
-    mOutputBucketFuture = std::shared_future<std::shared_ptr<Bucket>>();
+    mOutputBucket = std::shared_future<std::shared_ptr<Bucket>>();
     mOutputBucketHash.clear();
-    mOutputBucket.reset();
 }
 
 void
@@ -225,12 +223,7 @@ bool
 FutureBucket::mergeComplete() const
 {
     assert(isLive());
-    if (mOutputBucket)
-    {
-        return true;
-    }
-
-    auto status = mOutputBucketFuture.wait_for(std::chrono::nanoseconds(1));
+    auto status = mOutputBucket.wait_for(std::chrono::nanoseconds(1));
     return status == std::future_status::ready;
 }
 
@@ -239,29 +232,25 @@ FutureBucket::resolve()
 {
     checkState();
     assert(isLive());
-
-    if (mState == FB_LIVE_OUTPUT)
-    {
-        return mOutputBucket;
-    }
-
     clearInputs();
+    std::shared_ptr<Bucket> bucket;
 
-    if (!mOutputBucket)
     {
         auto timer = LogSlowExecution("Resolving bucket");
-        mOutputBucket = mOutputBucketFuture.get();
-        mOutputBucketHash = binToHex(mOutputBucket->getHash());
-
-        // Explicitly reset shared_future to ensure destruction of shared state.
-        // Some compilers store packaged_task lambdas in the shared state,
-        // keeping its captures alive as long as the future is alive.
-        mOutputBucketFuture = std::shared_future<std::shared_ptr<Bucket>>();
+        bucket = mOutputBucket.get();
     }
 
+    if (mOutputBucketHash.empty())
+    {
+        mOutputBucketHash = binToHex(bucket->getHash());
+    }
+    else
+    {
+        checkHashEq(bucket, mOutputBucketHash);
+    }
     mState = FB_LIVE_OUTPUT;
     checkState();
-    return mOutputBucket;
+    return bucket;
 }
 
 bool
@@ -310,8 +299,7 @@ FutureBucket::startMerge(Application& app, uint32_t maxProtocolVersion,
 
     assert(curr);
     assert(snap);
-    assert(!mOutputBucketFuture.valid());
-    assert(!mOutputBucket);
+    assert(!mOutputBucket.valid());
 
     CLOG(TRACE, "Bucket") << "Preparing merge of curr="
                           << hexAbbrev(curr->getHash())
@@ -329,14 +317,15 @@ FutureBucket::startMerge(Application& app, uint32_t maxProtocolVersion,
     // deserialized. In this case we want to attach to the existing merge, which
     // will have left a std::shared_future behind in a shared cache in the
     // bucket manager.
-    MergeKey mk{BucketList::keepDeadEntries(level), curr, snap, shadows};
+    MergeKey mk{maxProtocolVersion, BucketList::keepDeadEntries(level), curr,
+                snap, shadows};
     auto f = bm.getMergeFuture(mk);
     if (f.valid())
     {
         CLOG(TRACE, "Bucket") << "Re-attached to existing merge of curr="
                               << hexAbbrev(curr->getHash())
                               << " with snap=" << hexAbbrev(snap->getHash());
-        mOutputBucketFuture = f;
+        mOutputBucket = f;
         checkState();
         return;
     }
@@ -382,8 +371,8 @@ FutureBucket::startMerge(Application& app, uint32_t maxProtocolVersion,
             };
         });
 
-    mOutputBucketFuture = task->get_future().share();
-    bm.putMergeFuture(mk, mOutputBucketFuture);
+    mOutputBucket = task->get_future().share();
+    bm.putMergeFuture(mk, mOutputBucket);
     app.postOnBackgroundThread(bind(&task_t::operator(), task),
                                "FutureBucket: merge");
     checkState();

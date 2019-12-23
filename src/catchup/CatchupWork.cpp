@@ -5,7 +5,6 @@
 #include "catchup/CatchupWork.h"
 #include "bucket/BucketList.h"
 #include "catchup/ApplyBucketsWork.h"
-#include "catchup/ApplyBufferedLedgersWork.h"
 #include "catchup/ApplyCheckpointWork.h"
 #include "catchup/CatchupConfiguration.h"
 #include "catchup/DownloadApplyTxsWork.h"
@@ -14,7 +13,6 @@
 #include "history/HistoryManager.h"
 #include "historywork/BatchDownloadWork.h"
 #include "historywork/DownloadBucketsWork.h"
-#include "historywork/DownloadVerifyTxResultsWork.h"
 #include "historywork/GetAndUnzipRemoteFileWork.h"
 #include "historywork/GetHistoryArchiveStateWork.h"
 #include "historywork/VerifyBucketWork.h"
@@ -26,26 +24,16 @@
 namespace stellar
 {
 
-uint32_t const CatchupWork::PUBLISH_QUEUE_UNBLOCK_APPLICATION = 16;
-uint32_t const CatchupWork::PUBLISH_QUEUE_MAX_SIZE = 32;
-
 CatchupWork::CatchupWork(Application& app,
                          CatchupConfiguration catchupConfiguration,
-                         ProgressHandler progressHandler,
-                         std::shared_ptr<HistoryArchive> archive)
+                         ProgressHandler progressHandler)
     : Work(app, "catchup", BasicWork::RETRY_NEVER)
     , mLocalState{app.getLedgerManager().getLastClosedLedgerHAS()}
     , mDownloadDir{std::make_unique<TmpDir>(
           mApp.getTmpDirManager().tmpDir(getName()))}
     , mCatchupConfiguration{catchupConfiguration}
     , mProgressHandler{progressHandler}
-    , mArchive{archive}
 {
-    if (mArchive)
-    {
-        CLOG(INFO, "History")
-            << "CatchupWork: selected archive " << mArchive->getName();
-    }
 }
 
 CatchupWork::~CatchupWork()
@@ -66,20 +54,16 @@ void
 CatchupWork::doReset()
 {
     mBucketsAppliedEmitted = false;
-    mTransactionsVerifyEmitted = false;
     mBuckets.clear();
     mDownloadVerifyLedgersSeq.reset();
     mBucketVerifyApplySeq.reset();
     mTransactionsVerifyApplySeq.reset();
     mGetHistoryArchiveStateWork.reset();
-    mApplyBufferedLedgersWork.reset();
     auto const& lcl = mApp.getLedgerManager().getLastClosedLedgerHeader();
     mLastClosedLedgerHashPair =
         LedgerNumHashPair(lcl.header.ledgerSeq, make_optional<Hash>(lcl.hash));
     mCatchupSeq.reset();
     mGetBucketStateWork.reset();
-    mVerifyTxResults.reset();
-    mVerifyLedgers.reset();
     mLastApplied = mApp.getLedgerManager().getLastClosedLedgerHeader();
 }
 
@@ -104,24 +88,13 @@ CatchupWork::downloadVerifyLedgerChain(CatchupRange const& catchupRange,
     auto checkpointRange =
         CheckpointRange{verifyRange, mApp.getHistoryManager()};
     auto getLedgers = std::make_shared<BatchDownloadWork>(
-        mApp, checkpointRange, HISTORY_FILE_TYPE_LEDGER, *mDownloadDir,
-        mArchive);
+        mApp, checkpointRange, HISTORY_FILE_TYPE_LEDGER, *mDownloadDir);
     mVerifyLedgers = std::make_shared<VerifyLedgerChainWork>(
         mApp, *mDownloadDir, verifyRange, mLastClosedLedgerHashPair, rangeEnd);
 
     std::vector<std::shared_ptr<BasicWork>> seq{getLedgers, mVerifyLedgers};
     mDownloadVerifyLedgersSeq =
         addWork<WorkSequence>("download-verify-ledgers-seq", seq);
-}
-
-void
-CatchupWork::downloadVerifyTxResults(CatchupRange const& catchupRange)
-{
-    auto range =
-        LedgerRange{catchupRange.mLedgers.mFirst, catchupRange.getLast()};
-    auto checkpointRange = CheckpointRange{range, mApp.getHistoryManager()};
-    mVerifyTxResults = std::make_shared<DownloadVerifyTxResultsWork>(
-        mApp, checkpointRange, *mDownloadDir);
 }
 
 bool
@@ -137,10 +110,18 @@ CatchupWork::downloadApplyBuckets()
     auto const& has = mGetBucketStateWork->getHistoryArchiveState();
     std::vector<std::string> hashes = has.differingBuckets(mLocalState);
     auto getBuckets = std::make_shared<DownloadBucketsWork>(
-        mApp, mBuckets, hashes, *mDownloadDir, mArchive);
+        mApp, mBuckets, hashes, *mDownloadDir);
 
+    // A consequence of FIRST_PROTOCOL_SHADOWS_REMOVED upgrade, inputs or
+    // outputs aren't published to the archives anymore: new-style merges are
+    // re-started from scratch. To avoid going out of sync during online
+    // catchup, allow bucket application work to wait for merges to be complete
+    // before marking itself as "successful".
+    bool waitForMerges =
+        mCatchupConfiguration.mode() == CatchupConfiguration::Mode::ONLINE;
     auto applyBuckets = std::make_shared<ApplyBucketsWork>(
-        mApp, mBuckets, has, mVerifiedLedgerRangeStart.header.ledgerVersion);
+        mApp, mBuckets, has, mVerifiedLedgerRangeStart.header.ledgerVersion,
+        waitForMerges);
 
     std::vector<std::shared_ptr<BasicWork>> seq{getBuckets, applyBuckets};
     return std::make_shared<WorkSequence>(mApp, "download-verify-apply-buckets",
@@ -175,11 +156,10 @@ CatchupWork::assertBucketState()
 void
 CatchupWork::downloadApplyTransactions(CatchupRange const& catchupRange)
 {
-    auto waitForPublish = mCatchupConfiguration.offline();
     auto range =
         LedgerRange{catchupRange.mLedgers.mFirst, catchupRange.getLast()};
     mTransactionsVerifyApplySeq = std::make_shared<DownloadApplyTxsWork>(
-        mApp, *mDownloadDir, range, mLastApplied, waitForPublish, mArchive);
+        mApp, *mDownloadDir, range, mLastApplied);
 }
 
 BasicWork::State
@@ -205,7 +185,7 @@ CatchupWork::runCatchupStep()
                       mCatchupConfiguration.toLedger() + 1) -
                       1;
         mGetHistoryArchiveStateWork =
-            addWork<GetHistoryArchiveStateWork>(toCheckpoint, mArchive);
+            addWork<GetHistoryArchiveStateWork>(toCheckpoint);
         return State::WORK_RUNNING;
     }
     else if (mGetHistoryArchiveStateWork->getState() != State::WORK_SUCCESS)
@@ -256,8 +236,8 @@ CatchupWork::runCatchupStep()
         {
             if (!mGetBucketStateWork)
             {
-                mGetBucketStateWork = addWork<GetHistoryArchiveStateWork>(
-                    applyBucketsAt, mArchive);
+                mGetBucketStateWork =
+                    addWork<GetHistoryArchiveStateWork>(applyBucketsAt);
             }
             if (mGetBucketStateWork->getState() != State::WORK_SUCCESS)
             {
@@ -291,20 +271,8 @@ CatchupWork::runCatchupStep()
                                  mVerifiedLedgerRangeStart,
                                  mCatchupConfiguration.mode());
                 mBucketsAppliedEmitted = true;
-                mBuckets.clear();
                 mLastApplied =
                     mApp.getLedgerManager().getLastClosedLedgerHeader();
-            }
-        }
-        else if (mTransactionsVerifyApplySeq)
-        {
-            if (mTransactionsVerifyApplySeq->getState() ==
-                    State::WORK_SUCCESS &&
-                !mTransactionsVerifyEmitted)
-            {
-                mTransactionsVerifyEmitted = true;
-                mProgressHandler(ProgressState::APPLIED_TRANSACTIONS,
-                                 mLastApplied, mCatchupConfiguration.mode());
             }
         }
         return mCatchupSeq->getState();
@@ -322,13 +290,6 @@ CatchupWork::runCatchupStep()
             }
 
             std::vector<std::shared_ptr<BasicWork>> seq;
-            if (mCatchupConfiguration.mode() ==
-                CatchupConfiguration::Mode::OFFLINE_COMPLETE)
-            {
-                downloadVerifyTxResults(catchupRange);
-                seq.push_back(mVerifyTxResults);
-            }
-
             if (catchupRange.mApplyBuckets)
             {
                 // Step 4.2: Download, verify and apply buckets
@@ -342,11 +303,6 @@ CatchupWork::runCatchupStep()
                 downloadApplyTransactions(catchupRange);
                 seq.push_back(mTransactionsVerifyApplySeq);
             }
-
-            // Step 4.4: Apply buffered ledgers
-            mApplyBufferedLedgersWork =
-                std::make_shared<ApplyBufferedLedgersWork>(mApp);
-            seq.push_back(mApplyBufferedLedgersWork);
 
             mCatchupSeq =
                 addWork<WorkSequence>("catchup-seq", seq, RETRY_NEVER);
@@ -387,6 +343,8 @@ CatchupWork::onSuccess()
 {
     CLOG(INFO, "History") << "Catchup finished";
 
+    mProgressHandler(ProgressState::APPLIED_TRANSACTIONS, mLastApplied,
+                     mCatchupConfiguration.mode());
     mProgressHandler(ProgressState::FINISHED, mLastApplied,
                      mCatchupConfiguration.mode());
     mApp.getCatchupManager().historyCaughtup();

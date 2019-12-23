@@ -3,7 +3,6 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/BucketManager.h"
-#include "bucket/BucketTests.h"
 #include "catchup/test/CatchupWorkTests.h"
 #include "history/FileTransferInfo.h"
 #include "history/HistoryArchiveManager.h"
@@ -25,10 +24,7 @@
 #include "util/Logging.h"
 #include "work/WorkScheduler.h"
 
-#include "historywork/BatchDownloadWork.h"
 #include "historywork/DownloadBucketsWork.h"
-#include "historywork/DownloadVerifyTxResultsWork.h"
-#include "historywork/VerifyTxResultsWork.h"
 #include <lib/catch.hpp>
 #include <lib/util/format.h>
 
@@ -291,97 +287,6 @@ TEST_CASE("Ledger chain verification", "[ledgerheaderverification]")
     }
 }
 
-TEST_CASE("Tx results verification", "[batching][resultsverification]")
-{
-    CatchupSimulation catchupSimulation{};
-    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(2);
-    catchupSimulation.ensureOfflineCatchupPossible(checkpointLedger);
-
-    auto tmpDir =
-        catchupSimulation.getApp().getTmpDirManager().tmpDir("tx-results-test");
-    auto& wm = catchupSimulation.getApp().getWorkScheduler();
-    CheckpointRange range{{1, checkpointLedger},
-                          catchupSimulation.getApp().getHistoryManager()};
-
-    auto verifyHeadersWork = wm.executeWork<BatchDownloadWork>(
-        range, HISTORY_FILE_TYPE_LEDGER, tmpDir);
-    REQUIRE(verifyHeadersWork->getState() == BasicWork::State::WORK_SUCCESS);
-    SECTION("basic")
-    {
-        auto verify =
-            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
-        REQUIRE(verify->getState() == BasicWork::State::WORK_SUCCESS);
-    }
-    SECTION("header file missing")
-    {
-        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_LEDGER, range.mLast);
-        std::remove(ft.localPath_nogz().c_str());
-        auto verify =
-            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
-        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
-    }
-    SECTION("hash mismatch")
-    {
-        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_LEDGER, range.mLast);
-        XDRInputFileStream res;
-        res.open(ft.localPath_nogz());
-        std::vector<LedgerHeaderHistoryEntry> entries;
-        LedgerHeaderHistoryEntry curr;
-        while (res && res.readOne(curr))
-        {
-            entries.push_back(curr);
-        }
-        res.close();
-        REQUIRE_FALSE(entries.empty());
-        auto& lastEntry = entries.at(entries.size() - 1);
-        lastEntry.header.txSetResultHash = HashUtils::random();
-        std::remove(ft.localPath_nogz().c_str());
-
-        XDROutputFileStream out(true);
-        out.open(ft.localPath_nogz());
-        for (auto const& item : entries)
-        {
-            out.writeOne(item);
-        }
-        out.close();
-
-        auto verify =
-            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
-        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
-    }
-    SECTION("invalid result entries")
-    {
-        auto getResults = wm.executeWork<BatchDownloadWork>(
-            range, HISTORY_FILE_TYPE_RESULTS, tmpDir);
-        REQUIRE(getResults->getState() == BasicWork::State::WORK_SUCCESS);
-
-        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_RESULTS, range.mLast);
-        XDRInputFileStream res;
-        res.open(ft.localPath_nogz());
-        std::vector<TransactionHistoryResultEntry> entries;
-        TransactionHistoryResultEntry curr;
-        while (res && res.readOne(curr))
-        {
-            entries.push_back(curr);
-        }
-        res.close();
-        REQUIRE_FALSE(entries.empty());
-        std::remove(ft.localPath_nogz().c_str());
-
-        XDROutputFileStream out(true);
-        out.open(ft.localPath_nogz());
-        // Duplicate entries
-        for (int i = 0; i < entries.size(); ++i)
-        {
-            out.writeOne(entries[0]);
-        }
-        out.close();
-
-        auto verify = wm.executeWork<VerifyTxResultsWork>(tmpDir, range.mLast);
-        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
-    }
-}
-
 TEST_CASE("History publish", "[history][publish]")
 {
     CatchupSimulation catchupSimulation{};
@@ -413,18 +318,6 @@ TEST_CASE("History publish to multiple archives", "[history]")
 
     // Actually perform catchup and make sure everything is correct
     REQUIRE(catchupSimulation.catchupOffline(catchupApp, checkpointLedger));
-}
-
-TEST_CASE("History catchup with extra validation", "[history][publish]")
-{
-    CatchupSimulation catchupSimulation{};
-    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(3);
-    catchupSimulation.ensureOfflineCatchupPossible(checkpointLedger);
-
-    auto app = catchupSimulation.createCatchupApplication(
-        std::numeric_limits<uint32_t>::max(), Config::TESTDB_ON_DISK_SQLITE,
-        "app");
-    REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger, true));
 }
 
 TEST_CASE("Publish works correctly post shadow removal", "[history]")
@@ -633,18 +526,6 @@ TEST_CASE("History catchup", "[history][catchup][acceptance]")
         catchupSimulation.ensurePublishesComplete();
         REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3));
     }
-}
-
-TEST_CASE("Publish throttles catchup", "[history][catchup][acceptance]")
-{
-    CatchupSimulation catchupSimulation{};
-    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(20);
-    catchupSimulation.ensureLedgerAvailable(checkpointLedger + 1);
-    catchupSimulation.ensurePublishesComplete();
-    auto app = catchupSimulation.createCatchupApplication(
-        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
-        "app", /* publish */ true);
-    REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger));
 }
 
 TEST_CASE("History catchup with different modes",
@@ -881,9 +762,9 @@ TEST_CASE("Publish catchup alternation with stall",
     // Publish in simulation, catch up in completeApp and minimalApp.
     // CompleteApp will catch up using CATCHUP_COMPLETE, minimalApp will use
     // CATCHUP_MINIMAL.
-    int checkpoints = 3;
+    auto checkpoint = 3;
     auto checkpointLedger =
-        catchupSimulation.getLastCheckpointLedger(checkpoints);
+        catchupSimulation.getLastCheckpointLedger(checkpoint);
     catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
 
     auto completeApp = catchupSimulation.createCatchupApplication(
@@ -898,9 +779,9 @@ TEST_CASE("Publish catchup alternation with stall",
     for (int i = 1; i < 4; ++i)
     {
         // Now alternate between publishing new stuff and catching up to it.
-        checkpoints += i;
+        checkpoint += i;
         checkpointLedger =
-            catchupSimulation.getLastCheckpointLedger(checkpoints);
+            catchupSimulation.getLastCheckpointLedger(checkpoint);
         catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
 
         REQUIRE(
@@ -943,68 +824,53 @@ TEST_CASE("Publish catchup via s3", "[!hide][s3]")
     REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
 }
 
-TEST_CASE("HAS in publishqueue remains in pristine state until publish",
-          "[history]")
+TEST_CASE("HAS in publish queue is resolved", "[history]")
 {
     // In this test we generate some buckets and cause a checkpoint to be
     // published, checking that the (cached) set of buckets referenced by the
-    // publish queue is/was equal to the set we'd expect from a
-    // partially-resolved HAS. This test is unfortunately quite "aware" of the
-    // internals of the subsystems it's touching; they don't really have
-    // well-developed testing interfaces. It's also a bit sensitive to the
-    // amount of work done in a single crank and the fact that we're stopping
-    // the crank just before firing the callback that clears the cached set of
-    // buckets referenced by the publish queue.
+    // publish queue is/was equal to the set we'd expect from a fully-resolved
+    // HAS. This test is unfortunately quite "aware" of the internals of the
+    // subsystems it's touching; they don't really have well-developed testing
+    // interfaces. It's also a bit sensitive to the amount of work done in a
+    // single crank and the fact that we're stopping the crank just before
+    // firing the callback that clears the cached set of buckets referenced by
+    // the publish queue.
 
     Config cfg(getTestConfig(0));
     cfg.MAX_CONCURRENT_SUBPROCESSES = 0;
     TmpDirHistoryConfigurator tcfg;
     cfg = tcfg.configure(cfg, true);
     VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+    app->start();
+    auto& hm = app->getHistoryManager();
+    auto& lm = app->getLedgerManager();
+    auto& bl = app->getBucketManager().getBucketList();
 
-    BucketTests::for_versions_with_differing_bucket_logic(
-        cfg, [&](Config const& cfg) {
-            Application::pointer app = createTestApplication(clock, cfg);
-            app->start();
-            auto& hm = app->getHistoryManager();
-            auto& lm = app->getLedgerManager();
-            auto& bl = app->getBucketManager().getBucketList();
+    while (hm.getPublishQueueCount() != 1)
+    {
+        uint32_t ledger = lm.getLastClosedLedgerNum() + 1;
+        bl.addBatch(*app, ledger, cfg.LEDGER_PROTOCOL_VERSION, {},
+                    LedgerTestUtils::generateValidLedgerEntries(8), {});
 
-            while (hm.getPublishQueueCount() != 1)
-            {
-                uint32_t ledger = lm.getLastClosedLedgerNum() + 1;
-                bl.addBatch(*app, ledger, cfg.LEDGER_PROTOCOL_VERSION, {},
-                            LedgerTestUtils::generateValidLedgerEntries(8), {});
-                clock.crank(true);
-            }
+        // This serves as a synchronization barrier on the worker threads doing
+        // merges, while _not_ intrusively modifying the BucketList. Without
+        // this barrier there's still a possible race between a merge started
+        // at some ledger and the publsih-capture of the FutureBucket, but this
+        // is only going to be a problem for a short/small merge it's not very
+        // bad to re-run at publish time.
+        HistoryArchiveState has(
+            app->getLedgerManager().getLastClosedLedgerNum(),
+            app->getBucketManager().getBucketList());
+        has.resolveAllFutures();
 
-            // Capture publish queue's view of HAS right before taking snapshot
-            auto queuedHAS = hm.getPublishQueueStates()[0];
-
-            // Now take snapshot and schedule publish, this should *not* modify
-            // HAS in any way
-            hm.publishQueuedHistory();
-
-            // First, ensure bucket references are intact
-            auto pqb = hm.getBucketsReferencedByPublishQueue();
-            REQUIRE(queuedHAS.allBuckets() == pqb);
-
-            // Second, ensure `next` is in the exact same state as when it was
-            // queued
-            for (uint32_t i = 0; i < BucketList::kNumLevels; i++)
-            {
-                auto const& currentNext = bl.getLevel(i).getNext();
-                auto const& queuedNext = queuedHAS.currentBuckets[i].next;
-
-                // Verify state against potential race: HAS was queued with a
-                // merge still in-progress, then dequeued and made live
-                // (re-starting any merges in-progress) too early, possibly
-                // handing off already resolved merges to publish work.
-                REQUIRE(currentNext.hasOutputHash() ==
-                        queuedNext.hasOutputHash());
-                REQUIRE(currentNext.isClear() == queuedNext.isClear());
-            }
-        });
+        clock.crank(true);
+    }
+    auto pqb = hm.getBucketsReferencedByPublishQueue();
+    HistoryArchiveState has(app->getLedgerManager().getLastClosedLedgerNum(),
+                            app->getBucketManager().getBucketList());
+    has.resolveAllFutures();
+    REQUIRE(has.allBuckets() == pqb);
 }
 
 TEST_CASE("persist publish queue", "[history][publish][acceptance]")

@@ -7,7 +7,6 @@
 #include "overlay/Peer.h"
 #include <deque>
 #include <random>
-
 /*
 Another peer out there that we are connected to
 */
@@ -109,8 +108,6 @@ class LoopbackPeer : public Peer
     {
         return mDropReason;
     }
-
-    std::string getIP() const override;
 
     using Peer::sendAuth;
 

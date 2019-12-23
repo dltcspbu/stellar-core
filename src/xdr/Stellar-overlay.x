@@ -49,24 +49,14 @@ struct Auth
     int unused;
 };
 
-enum IPAddrType
+struct PeerNameXdr
 {
-    IPv4 = 0,
-    IPv6 = 1
+    uint64 data;
 };
 
-struct PeerAddress
+struct Accept
 {
-    union switch (IPAddrType type)
-    {
-    case IPv4:
-        opaque ipv4[4];
-    case IPv6:
-        opaque ipv6[16];
-    }
-    ip;
-    uint32 port;
-    uint32 numFailures;
+    bool data;
 };
 
 enum MessageType
@@ -90,7 +80,8 @@ enum MessageType
     GET_SCP_STATE = 12,
 
     // new messages
-    HELLO = 13
+    HELLO = 13,
+    ACCEPT = 14
 };
 
 struct DontHave
@@ -101,6 +92,8 @@ struct DontHave
 
 union StellarMessage switch (MessageType type)
 {
+case ACCEPT:
+    Accept accept;
 case ERROR_MSG:
     Error error;
 case HELLO:
@@ -112,7 +105,7 @@ case DONT_HAVE:
 case GET_PEERS:
     void;
 case PEERS:
-    PeerAddress peers<100>;
+    PeerNameXdr peers<100>;
 
 case GET_TX_SET:
     uint256 txSetHash;

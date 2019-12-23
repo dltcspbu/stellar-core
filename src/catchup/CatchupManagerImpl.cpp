@@ -44,7 +44,6 @@ CatchupManagerImpl::historyCaughtup()
 
 void
 CatchupManagerImpl::catchupHistory(CatchupConfiguration catchupConfiguration,
-                                   std::shared_ptr<HistoryArchive> archive,
                                    CatchupWork::ProgressHandler handler)
 {
     if (mCatchupWork)
@@ -53,7 +52,7 @@ CatchupManagerImpl::catchupHistory(CatchupConfiguration catchupConfiguration,
     }
 
     mCatchupWork = mApp.getWorkScheduler().scheduleWork<CatchupWork>(
-        catchupConfiguration, handler, archive);
+        catchupConfiguration, handler);
 }
 
 std::string

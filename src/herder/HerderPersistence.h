@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <util/optional.h>
 
 namespace soci
 {

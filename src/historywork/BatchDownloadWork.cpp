@@ -4,7 +4,6 @@
 
 #include "historywork/BatchDownloadWork.h"
 #include "catchup/CatchupManager.h"
-#include "history/HistoryArchive.h"
 #include "history/HistoryManager.h"
 #include "historywork/GetAndUnzipRemoteFileWork.h"
 #include "historywork/Progress.h"
@@ -15,22 +14,20 @@ namespace stellar
 {
 BatchDownloadWork::BatchDownloadWork(Application& app, CheckpointRange range,
                                      std::string const& type,
-                                     TmpDir const& downloadDir,
-                                     std::shared_ptr<HistoryArchive> archive)
+                                     TmpDir const& downloadDir)
     : BatchWork(app, fmt::format("batch-download-{:s}-{:08x}-{:08x}", type,
                                  range.mFirst, range.mLast))
     , mRange(range)
     , mNext(range.mFirst)
     , mFileType(type)
     , mDownloadDir(downloadDir)
-    , mArchive(archive)
 {
 }
 
 std::string
 BatchDownloadWork::getStatus() const
 {
-    if (!isDone() && !isAborting())
+    if (getState() == State::WORK_RUNNING)
     {
         auto task = fmt::format("downloading {:s} files", mFileType);
         return fmtProgress(mApp, task, mRange.mFirst, mRange.mLast, mNext);
@@ -51,8 +48,7 @@ BatchDownloadWork::yieldMoreWork()
     FileTransferInfo ft(mDownloadDir, mFileType, mNext);
     CLOG(DEBUG, "History") << "Downloading and unzipping " << mFileType
                            << " for checkpoint " << mNext;
-    auto getAndUnzip =
-        std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft, mArchive);
+    auto getAndUnzip = std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft);
     mNext += mApp.getHistoryManager().getCheckpointFrequency();
 
     return getAndUnzip;

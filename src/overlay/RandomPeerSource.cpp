@@ -70,9 +70,9 @@ RandomPeerSource::RandomPeerSource(PeerManager& peerManager,
 {
 }
 
-std::vector<PeerBareAddress>
+std::vector<my::PeerName>
 RandomPeerSource::getRandomPeers(
-    int size, std::function<bool(PeerBareAddress const&)> pred)
+    int size, std::function<bool(my::PeerName const&)> pred)
 {
     assert(size >= 0);
     if (size == 0)
@@ -85,7 +85,7 @@ RandomPeerSource::getRandomPeers(
         mPeerCache = mPeerManager.loadRandomPeers(mPeerQuery, size);
     }
 
-    auto result = std::vector<PeerBareAddress>{};
+    auto result = std::vector<my::PeerName>{};
     auto it = std::begin(mPeerCache);
     auto end = std::end(mPeerCache);
     for (; it != end && result.size() < size; it++)

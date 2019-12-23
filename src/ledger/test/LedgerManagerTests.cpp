@@ -16,6 +16,7 @@ namespace stellar
 class LedgerManagerForTests : public LedgerManagerImpl
 {
   public:
+    using LedgerManagerImpl::applyBufferedLedgers;
     using LedgerManagerImpl::continueCatchup;
     using LedgerManagerImpl::finalizeCatchup;
     using LedgerManagerImpl::initializeCatchup;
@@ -43,9 +44,8 @@ class LedgerManagerForTests : public LedgerManagerImpl
 class LedgerManagerTestApplication : public TestApplication
 {
   public:
-    LedgerManagerTestApplication(VirtualClock& clock, Config const& cfg,
-                                 Application::AppMode mode)
-        : TestApplication(clock, cfg, mode)
+    LedgerManagerTestApplication(VirtualClock& clock, Config const& cfg)
+        : TestApplication(clock, cfg)
     {
     }
 
@@ -63,4 +63,45 @@ class LedgerManagerTestApplication : public TestApplication
         return std::make_unique<LedgerManagerForTests>(*this);
     }
 };
+}
+
+TEST_CASE("new ledger comes from network after last applyBufferedLedgers is "
+          "scheduled",
+          "[ledger]")
+{
+    VirtualClock clock;
+    auto app = createTestApplication<LedgerManagerTestApplication>(
+        clock, getTestConfig());
+    app->start();
+
+    auto ledgerCloseData = [](uint32_t ledger) {
+        auto txSet = std::make_shared<TxSetFrame>(Hash{});
+        StellarValue sv{txSet->getContentsHash(), 2, emptyUpgradeSteps,
+                        STELLAR_VALUE_BASIC};
+        return LedgerCloseData{ledger, txSet, sv};
+    };
+
+    auto& ledgerManager = app->getLedgerManager();
+    ledgerManager.initializeCatchup(ledgerCloseData(2));
+    ledgerManager.continueCatchup(ledgerCloseData(3));
+
+    ledgerManager.setCatchupState(
+        LedgerManager::CatchupState::APPLYING_BUFFERED_LEDGERS);
+    ledgerManager.applyBufferedLedgers();
+
+    while (clock.crank())
+    {
+        if (ledgerManager.syncingLedgersEmpty())
+        {
+            REQUIRE(ledgerManager.getCatchupState() ==
+                    LedgerManager::CatchupState::WAITING_FOR_CLOSING_LEDGER);
+            break;
+        }
+    }
+
+    // there is gap, so new catchup is starting
+    ledgerManager.finalizeCatchup(ledgerCloseData(5));
+    REQUIRE(!ledgerManager.syncingLedgersEmpty());
+    REQUIRE(ledgerManager.getCatchupState() ==
+            LedgerManager::CatchupState::WAITING_FOR_TRIGGER_LEDGER);
 }

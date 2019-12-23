@@ -57,7 +57,7 @@ bool Database::gDriversRegistered = false;
 
 // smallest schema version supported
 static unsigned long const MIN_SCHEMA_VERSION = 9;
-static unsigned long const SCHEMA_VERSION = 11;
+static unsigned long const SCHEMA_VERSION = 10;
 
 // These should always match our compiled version precisely, since we are
 // using a bundled version to get access to carray(). But in case someone
@@ -194,11 +194,6 @@ Database::applySchemaUpgrade(unsigned long vers)
     case 10:
         // add tracking table information
         mApp.getHerderPersistence().createQuorumTrackingTable(mSession);
-        break;
-    case 11:
-        mSession << "DROP INDEX IF EXISTS bestofferindex;";
-        mSession << "CREATE INDEX bestofferindex ON offers "
-                    "(sellingasset,buyingasset,price,offerid);";
         break;
     default:
         throw std::runtime_error("Unknown DB schema version");
@@ -392,7 +387,7 @@ soci::session&
 Database::getSession()
 {
     // global session can only be used from the main thread
-    assertThreadIsMain();
+    // assertThreadIsMain();
     return mSession;
 }
 
@@ -560,19 +555,15 @@ Database::recentIdleDbPercent()
 
 DBTimeExcluder::DBTimeExcluder(Application& app)
     : mApp(app)
-    , mStartQueryTime(app.modeHasDatabase() ? app.getDatabase().totalQueryTime()
-                                            : std::chrono::nanoseconds(0))
+    , mStartQueryTime(app.getDatabase().totalQueryTime())
     , mStartTotalTime(app.getClock().now())
 {
 }
 
 DBTimeExcluder::~DBTimeExcluder()
 {
-    if (mApp.modeHasDatabase())
-    {
-        auto deltaQ = mApp.getDatabase().totalQueryTime() - mStartQueryTime;
-        auto deltaT = mApp.getClock().now() - mStartTotalTime;
-        mApp.getDatabase().excludeTime(deltaQ, deltaT);
-    }
+    auto deltaQ = mApp.getDatabase().totalQueryTime() - mStartQueryTime;
+    auto deltaT = mApp.getClock().now() - mStartTotalTime;
+    mApp.getDatabase().excludeTime(deltaQ, deltaT);
 }
 }

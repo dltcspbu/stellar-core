@@ -70,25 +70,21 @@ CommandHandler::CommandHandler(Application& app) : mApp(app)
 
     mServer->add404(std::bind(&CommandHandler::fileNotFound, this, _1, _2));
 
-    if (mApp.modeHasDatabase())
-    {
-        addRoute("dropcursor", &CommandHandler::dropcursor);
-        addRoute("getcursor", &CommandHandler::getcursor);
-        addRoute("setcursor", &CommandHandler::setcursor);
-        addRoute("maintenance", &CommandHandler::maintenance);
-    }
-
     addRoute("bans", &CommandHandler::bans);
     addRoute("clearmetrics", &CommandHandler::clearMetrics);
     addRoute("connect", &CommandHandler::connect);
+    addRoute("dropcursor", &CommandHandler::dropcursor);
     addRoute("droppeer", &CommandHandler::dropPeer);
+    addRoute("getcursor", &CommandHandler::getcursor);
     addRoute("info", &CommandHandler::info);
     addRoute("ll", &CommandHandler::ll);
     addRoute("logrotate", &CommandHandler::logRotate);
+    addRoute("maintenance", &CommandHandler::maintenance);
     addRoute("manualclose", &CommandHandler::manualClose);
     addRoute("metrics", &CommandHandler::metrics);
     addRoute("peers", &CommandHandler::peers);
     addRoute("quorum", &CommandHandler::quorum);
+    addRoute("setcursor", &CommandHandler::setcursor);
     addRoute("scp", &CommandHandler::scpInfo);
     addRoute("tx", &CommandHandler::tx);
     addRoute("unban", &CommandHandler::unban);
@@ -281,20 +277,18 @@ CommandHandler::connect(std::string const& params, std::string& retStr)
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
-    auto peerP = retMap.find("peer");
-    auto portP = retMap.find("port");
-    if (peerP != retMap.end() && portP != retMap.end())
+    auto peerNameP = retMap.find("peerName");
+    if (peerNameP != retMap.end())
     {
-        std::stringstream str;
-        str << peerP->second << ":" << portP->second;
-        retStr = "Connect to: ";
-        retStr += str.str();
-        mApp.getOverlayManager().connectTo(
-            PeerBareAddress::resolve(str.str(), mApp));
+        string peerNameStr = peerNameP->second;
+        CLOG(INFO, "Main") << "CommandHandler: connecting to " << peerNameStr;
+        my::PeerName peerName = my::PeerName(peerNameStr);
+        retStr = "Connect to: " + peerName.toString(); 
+        mApp.getOverlayManager().connectTo(peerName);
     }
     else
     {
-        retStr = "Must specify a peer and port: connect&peer=PEER&port=PORT";
+        retStr = "Must specify a peer and port: connect&peerName=PEERNAME";
     }
 }
 

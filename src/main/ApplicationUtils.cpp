@@ -236,7 +236,8 @@ rebuildLedgerFromBuckets(Config cfg)
     has.prepareForPublish(*app);
 
     auto applyBucketsWork = ws.executeWork<ApplyBucketsWork>(
-        localBuckets, has, Config::CURRENT_LEDGER_PROTOCOL_VERSION);
+        localBuckets, has, Config::CURRENT_LEDGER_PROTOCOL_VERSION,
+        /* resolveMerges */ false);
     auto ok = applyBucketsWork->getState() == BasicWork::State::WORK_SUCCESS;
     if (ok)
     {
@@ -356,13 +357,13 @@ writeCatchupInfo(Json::Value const& catchupInfo, std::string const& outputFile)
 
 int
 catchup(Application::pointer app, CatchupConfiguration cc,
-        Json::Value& catchupInfo, std::shared_ptr<HistoryArchive> archive)
+        Json::Value& catchupInfo)
 {
     app->start();
 
     try
     {
-        app->getLedgerManager().startCatchup(cc, archive);
+        app->getLedgerManager().startCatchup(cc);
     }
     catch (std::invalid_argument const&)
     {
